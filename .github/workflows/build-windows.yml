@@ -44,6 +44,13 @@ jobs:
   windows-e2e:
     needs: build
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 2.0 betas carry the current Node.js runtime and McBopomofo; 1.3.0 is
+        # the release GitHub marks as "latest".
+        pime: ["v2.0.0-beta3", "v1.3.0-stable"]
+    name: windows-e2e (PIME ${{ matrix.pime }})
     steps:
       - uses: actions/checkout@v6
 
@@ -52,12 +59,12 @@ jobs:
           name: MixZhuyin-setup
           path: setup
 
-      - name: Download the latest PIME release
+      - name: Download PIME ${{ matrix.pime }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release download --repo EasyIME/PIME --pattern "*setup.exe" --dir pime
+          gh release download "${{ matrix.pime }}" --repo EasyIME/PIME --pattern "*setup.exe" --dir pime
           Get-ChildItem pime | Format-Table Name, Length
 
       - name: Set up PIME as a full install
@@ -76,9 +83,10 @@ jobs:
           Copy-Item "$root\*" $dest -Recurse -Force
           New-Item -Path "HKLM:\SOFTWARE\PIME" -Force | Out-Null
           Set-ItemProperty -Path "HKLM:\SOFTWARE\PIME" -Name "(default)" -Value $dest
-          foreach ($f in @("node\node.exe", "x64\PIMETextService.dll", "x86\PIMETextService.dll", "node\input_methods\McBopomofo\ime.json")) {
+          foreach ($f in @("node\node.exe", "x64\PIMETextService.dll", "x86\PIMETextService.dll")) {
             if (-not (Test-Path "$dest\$f")) { throw "Missing $f after unpacking PIME" }
           }
+          "Node.js input methods:"; Get-ChildItem "$dest\node\input_methods" -Directory | ForEach-Object Name
           $p = Start-Process "$env:WINDIR\System32\regsvr32.exe" -ArgumentList '/s', "`"$dest\x64\PIMETextService.dll`"" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "regsvr32 x64 failed: $($p.ExitCode)" }
           $p = Start-Process "$env:WINDIR\SysWOW64\regsvr32.exe" -ArgumentList '/s', "`"$dest\x86\PIMETextService.dll`"" -Wait -PassThru
@@ -104,7 +112,8 @@ jobs:
           $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\{35F67E9D-A54D-4177-9697-8B0AB71A9E04}\LanguageProfile\0x00000404"
           Get-ChildItem $tip | ForEach-Object PSChildName
           if (-not (Test-Path "$tip\$guid")) { throw "MixZhuyin profile $guid is not registered" }
-          if (-not (Test-Path "$tip\{5340C1D9-706E-4B6B-B022-2E763FA5F674}")) { throw "McBopomofo profile disappeared" }
+          $others = (Get-ChildItem $tip | Measure-Object).Count
+          if ($others -lt 2) { throw "Other PIME input methods disappeared" }
           if (-not (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MixZhuyin")) { throw "Uninstall entry missing" }
           "MixZhuyin is registered as $guid"
 
@@ -132,7 +141,7 @@ jobs:
           Get-ChildItem $tip | ForEach-Object PSChildName
           if (Test-Path "$dest\node\input_methods\MixZhuyin\ime.json") { throw "MixZhuyin files remain" }
           if (Test-Path "$tip\{99F99D2E-4C0A-4E5E-BAE6-2876AEFC9A94}") { throw "MixZhuyin profile remains registered" }
-          if (-not (Test-Path "$tip\{5340C1D9-706E-4B6B-B022-2E763FA5F674}")) { throw "McBopomofo profile was removed" }
+          if ((Get-ChildItem $tip | Measure-Object).Count -lt 1) { throw "Other PIME input methods were removed" }
           if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MixZhuyin") { throw "Uninstall entry remains" }
           # The per-user profile list must stay numbered 1..N (gaps crash Windows 11's switcher).
           $up = "HKCU:\Control Panel\International\User Profile\zh-Hant-TW"
