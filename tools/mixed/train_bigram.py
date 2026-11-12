@@ -286,8 +286,14 @@ def main():
         with open(args.heldout, "w", encoding="utf-8") as f:
             f.write("\n".join(heldout) + "\n")
         print(f"wrote {len(heldout)} held-out sentences to {args.heldout}")
-    print(f"total time {time.time() - t0:.0f}s")
+    print(f"total time {time.time() - t0:.0f}s", flush=True)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
+    # A streaming dataset may still have a download thread running when we
+    # stop reading early; skip interpreter finalization so it cannot abort
+    # the process after the outputs are safely written.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
