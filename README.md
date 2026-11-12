@@ -19,6 +19,26 @@
 - `MixedComposer.ts`：組字狀態（游標、選字、Shift 中英互換、自動空白、學習）
 - `EnglishModel.ts`、`EnglishData.ts`：英文詞頻
 
+## 整句選字（本機語言模型）
+
+中文部分判斷完之後，會再用「詞與詞相鄰的機率」把整段重新選一次字，例如「記得帶傘」不會被選成「記得代傘」。模型是詞的二元語法（bigram），在本機計算、不連網，每句約 1–2 毫秒。
+
+- 訓練語料：中文維基百科 1.5 億字＋繁體中文網頁語料（Traditional Chinese C4）3 億字，用 OpenCC 轉成台灣正體用語，以小麥注音的詞庫斷詞。
+- 模型大小：30 萬組詞對，約 3 MB。
+- 訓練方式：GitHub Actions 的「Train language model」工作流程（[`tools/mixed/train_bigram.py`](tools/mixed/train_bigram.py)），訓練完會自動評估並推到 `lm/bigram-<編號>` 分支。
+
+在 2,000 句沒參與訓練的句子上（純注音輸入、大千配置）的結果：
+
+| 測試句 | 只用詞頻（小麥注音原本） | 加上語言模型 |
+| --- | --- | --- |
+| 維基百科 1,000 句：字正確率 | 91.8% | 93.8% |
+| 維基百科 1,000 句：整句全對 | 58.5% | 67.9% |
+| 網頁文字 1,000 句：字正確率 | 89.6% | 92.1% |
+| 網頁文字 1,000 句：整句全對 | 48.2% | 59.5% |
+| 日常混打 146 句：整句全對 | 141 | 144 |
+
+> 給譯者／詞庫維護者：`src/MixedInput/BigramData.ts` 是訓練產生的資料，請不要手改；要更新就重新跑訓練流程。它只影響混打模式的選字順序，不改變小麥注音詞庫本身。
+
 ## 操作
 
 | 按鍵 | 功能 |
@@ -58,6 +78,6 @@ npm run build:pime    # Windows（PIME）版 output/pime
 
 ## 授權
 
-程式碼採 MIT 授權，與小麥注音相同。英文詞頻資料 `src/MixedInput/EnglishData.ts` 衍生自 wordfreq，採 CC BY-SA 4.0。詳見 [NOTICE.md](NOTICE.md)。
+程式碼採 MIT 授權，與小麥注音相同。英文詞頻資料 `src/MixedInput/EnglishData.ts` 衍生自 wordfreq、語言模型資料 `src/MixedInput/BigramData.ts` 衍生自維基百科與 Traditional Chinese C4，這兩個資料檔採 CC BY-SA 4.0。詳見 [NOTICE.md](NOTICE.md)。
 
 小麥注音原本的說明文件見 [README.upstream.md](README.upstream.md)。

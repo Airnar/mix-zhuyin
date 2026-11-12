@@ -103,7 +103,10 @@ describe("language model evaluation", () => {
       const results: Score[] = [];
       const base = new MixedDecoder(lm, english, layout);
       results.push(score("unigram only (McBopomofo)", base, cases));
-      for (const w of [0.5, 0.75, 1.0, 1.25, 1.5]) {
+      const weights = (process.env.MIX_LM_WEIGHTS ?? "0.5,0.75,1,1.25,1.5")
+        .split(",")
+        .map(Number);
+      for (const w of weights) {
         const d = new MixedDecoder(lm, english, layout);
         d.bigramModel = bigram;
         d.params.bigramWeight = w;

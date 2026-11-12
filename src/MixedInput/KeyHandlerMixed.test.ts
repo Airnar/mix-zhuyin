@@ -19,6 +19,7 @@ import { LocalizedStrings } from "../McBopomofo/LocalizedStrings";
 import { webData } from "../McBopomofo/WebData";
 import { WebLanguageModel } from "../McBopomofo/WebLanguageModel";
 import { BigramModel } from "./BigramModel";
+import { keysForReading } from "./MixedDecoder";
 
 function keyFor(ch: string): Key {
   if (ch === " ") {
@@ -169,5 +170,19 @@ describe("KeyHandler mixed mode and the bigram model", () => {
     const s = new Session(h);
     s.type("ru42k7294n03");
     expect(s.composing).toBe("記得帶傘");
+  });
+});
+
+describe("KeyHandler mixed mode with the bundled bigram model", () => {
+  test("picks homophones from context out of the box", () => {
+    const s = new Session(mixedHandler());
+    s.type("ru42k7294n03");
+    expect(s.composing).toBe("記得帶傘");
+  });
+
+  test("keeps everyday words that encyclopedic text would get wrong", () => {
+    const s = new Session(mixedHandler());
+    s.type(keysForReading("ㄉㄨㄟˋ-ㄚ", BopomofoKeyboardLayout.StandardLayout));
+    expect(s.composing).toBe("對啊");
   });
 });

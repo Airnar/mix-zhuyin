@@ -8,6 +8,7 @@
 import { BopomofoKeyboardLayout } from "../Mandarin";
 import { webData } from "../McBopomofo/WebData";
 import { WebLanguageModel } from "../McBopomofo/WebLanguageModel";
+import { bigramData } from "./BigramData";
 import { BigramModel } from "./BigramModel";
 import { englishData } from "./EnglishData";
 import { EnglishModel } from "./EnglishModel";
@@ -280,5 +281,27 @@ describe("MixedDecoder with a bigram model", () => {
     const d = makeDecoder();
     d.bigramModel = new BigramModel("帶\t傘 200\n");
     expect(decodeText(d, "ok " + keys + "please")).toBe("ok 記得帶傘please");
+  });
+});
+
+describe("MixedDecoder with the bundled bigram model", () => {
+  test("gets more of the sentence corpus exactly right than unigrams alone", () => {
+    const layout = BopomofoKeyboardLayout.StandardLayout;
+    const plain = makeDecoder(layout);
+    const withBigram = makeDecoder(layout);
+    withBigram.bigramModel = new BigramModel(bigramData);
+    let plainExact = 0;
+    let bigramExact = 0;
+    for (const s of sentences as Segment[][]) {
+      const { keys, expected } = build(s, layout);
+      if (decodeText(plain, keys).trimEnd() === expected.trimEnd()) {
+        plainExact++;
+      }
+      if (decodeText(withBigram, keys).trimEnd() === expected.trimEnd()) {
+        bigramExact++;
+      }
+    }
+    expect(bigramExact).toBeGreaterThanOrEqual(144);
+    expect(bigramExact).toBeGreaterThan(plainExact);
   });
 });
