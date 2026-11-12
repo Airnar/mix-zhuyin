@@ -9,10 +9,10 @@ import tornado.web
 
 current_dir = os.path.dirname(__file__)
 
-config_dir = os.path.join(os.path.expandvars("%APPDATA%"), "PIME", "mcbopomofo")
-localdata_dir = os.path.join(os.path.expandvars("%LOCALAPPDATA%"), "PIME", "mcbopomofo")
+config_dir = os.path.join(os.path.expandvars("%APPDATA%"), "PIME", "mixzhuyin")
+localdata_dir = os.path.join(os.path.expandvars("%LOCALAPPDATA%"), "PIME", "mixzhuyin")
 
-COOKIE_ID = "mcbopomofo_config_token"
+COOKIE_ID = "mixzhuyin_config_token"
 SERVER_TIMEOUT = 120
 DEFAULT_CONFIG = {
     "layout": "standard",
@@ -23,6 +23,8 @@ DEFAULT_CONFIG = {
     "chineseConversion": False,
     "move_cursor": True,
     "letter_mode": "upper",
+    "mixed_mode": True,
+    "mixed_auto_space": True,
 }
 
 

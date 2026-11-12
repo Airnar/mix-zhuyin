@@ -186,3 +186,35 @@ describe("KeyHandler mixed mode with the bundled bigram model", () => {
     expect(s.composing).toBe("對啊");
   });
 });
+
+describe("KeyHandler mixed mode spacing across commits", () => {
+  test("spaces English after Chinese committed just before", () => {
+    const s = new Session(mixedHandler());
+    s.type("su3cl3");
+    s.key(Key.namedKey(KeyName.RETURN));
+    s.type("hello");
+    s.key(Key.namedKey(KeyName.RETURN));
+    expect(s.committed).toBe("你好 hello");
+  });
+
+  test("does not space the first word of a new line", () => {
+    const s = new Session(mixedHandler());
+    s.type("su3cl3");
+    s.key(Key.namedKey(KeyName.RETURN));
+    // Enter with nothing composed goes to the app as a new line.
+    expect(s.key(Key.namedKey(KeyName.RETURN))).toBe(false);
+    s.type("hello");
+    s.key(Key.namedKey(KeyName.RETURN));
+    expect(s.committed).toBe("你好hello");
+  });
+
+  test("does not space after the caret moves away", () => {
+    const s = new Session(mixedHandler());
+    s.type("su3cl3");
+    s.key(Key.namedKey(KeyName.RETURN));
+    expect(s.key(Key.namedKey(KeyName.UP))).toBe(false);
+    s.type("hello");
+    s.key(Key.namedKey(KeyName.RETURN));
+    expect(s.committed).toBe("你好hello");
+  });
+});

@@ -215,6 +215,9 @@ class PimeMcBopomofo {
         child_process.exec(`rundll32 user32.dll,MessageBeep`);
       }
     });
+    // Apply the defaults right away: settings load asynchronously, and on a
+    // fresh install there is no settings file to load at all.
+    this.applySettings();
     this.loadSettings(() => {
       this.isOpened = !this.settings.by_default_deactivated;
     });
@@ -249,10 +252,13 @@ class PimeMcBopomofo {
     "PIME",
   );
 
-  /** The path to the McBopomofo user data folder. */
+  /**
+   * The path to the user data folder. MixZhuyin keeps its own folder so it
+   * can be installed next to McBopomofo without sharing settings.
+   */
   readonly mcBopomofoUserDataPath: string = path.join(
     this.pimeUserDataPath,
-    "mcbopomofo",
+    "mixzhuyin",
   );
 
   /** The path to the user phrases file. */
@@ -459,6 +465,8 @@ class PimeMcBopomofo {
           "Unable to read user settings from " + this.userSettingsPath,
         );
         this.writeSettings();
+        this.applySettings();
+        callback();
         return;
       }
       console.log(data);
@@ -473,7 +481,9 @@ class PimeMcBopomofo {
       } catch {
         console.error("Failed to parse settings");
         this.writeSettings();
+        this.applySettings();
       }
+      callback();
     });
   }
 
@@ -728,7 +738,7 @@ class PimeMcBopomofo {
         break;
       case PimeMcBopomofoCommand.OpenHomepage:
         {
-          const url = "https://mcbopomofo.openvanilla.org/";
+          const url = "https://github.com/Airnar/mix-zhuyin";
           const command = `start ${url}`;
           console.log("Run " + command);
           child_process.exec(command);
@@ -736,7 +746,7 @@ class PimeMcBopomofo {
         break;
       case PimeMcBopomofoCommand.OpenBugReport:
         {
-          const url = "https://github.com/openvanilla/McBopomofoWeb/issues";
+          const url = "https://github.com/Airnar/mix-zhuyin/issues";
           const command = `start ${url}`;
           console.log("Run " + command);
           child_process.exec(command);
@@ -1223,7 +1233,7 @@ module.exports = {
     if (request.method === "onMenu") {
       const menu = [
         {
-          text: "小麥注音輸入法網站",
+          text: "混打注音網站",
           id: PimeMcBopomofoCommand.OpenHomepage,
         },
         {
@@ -1276,7 +1286,7 @@ module.exports = {
         },
         {},
         {
-          text: "小麥注音輸入法 for PIME 2.1.0",
+          text: "混打注音 for PIME 0.1.0（基於小麥注音）",
         },
       ];
       const response = Object.assign({}, responseTemplate, { return: menu });

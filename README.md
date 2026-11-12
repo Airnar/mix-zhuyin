@@ -39,6 +39,16 @@
 
 > 給譯者／詞庫維護者：`src/MixedInput/BigramData.ts` 是訓練產生的資料，請不要手改；要更新就重新跑訓練流程。它只影響混打模式的選字順序，不改變小麥注音詞庫本身。
 
+## 安裝（Windows）
+
+混打注音裝在 [PIME](https://github.com/EasyIME/PIME) 輸入法平台裡（小麥注音的 Windows 版也是用 PIME）。
+
+1. 到 [PIME Releases](https://github.com/EasyIME/PIME/releases) 下載 PIME 安裝程式，安裝時選「**完整安裝**」，或至少勾選「小麥注音」（這樣才會裝 PIME 的 Node.js 與 Python 執行環境）。
+2. 下載並執行 `MixZhuyin-<版本>-setup.exe`。安裝程式沒有數位簽章，Windows 會顯示 SmartScreen 警告，按「其他資訊 → 仍要執行」。
+3. 按 <kbd>Win</kbd> + <kbd>空白鍵</kbd> 切換到「混打注音」。
+
+混打注音有自己的名稱與設定資料夾（`%APPDATA%\PIME\mixzhuyin`），可以和小麥注音同時安裝。解除安裝會保留你的使用者詞庫。
+
 ## 操作
 
 | 按鍵 | 功能 |

@@ -1,0 +1,145 @@
+name: Windows installer
+
+# Builds the MixZhuyin add-on installer for PIME, then tests it end to end on
+# Windows: set up PIME, install MixZhuyin, type through PIME's own Node.js,
+# and uninstall again.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "output/pime/**"
+      - "windows/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/build-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.x"
+      - run: npm ci
+      - run: npm run build:pime
+      - name: Type through the PIME module (Linux)
+        run: node windows/e2e/type_test.js
+      - name: Install NSIS
+        run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+      - name: Build the installer
+        run: bash windows/build_installer.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MixZhuyin-setup
+          path: windows/build/*.exe
+          if-no-files-found: error
+
+  windows-e2e:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MixZhuyin-setup
+          path: setup
+
+      - name: Download the latest PIME release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download --repo EasyIME/PIME --pattern "*setup.exe" --dir pime
+          Get-ChildItem pime | Format-Table Name, Length
+
+      - name: Set up PIME as a full install
+        # PIME's installer only installs its Node.js backend when 小麥注音 is
+        # selected, which a silent install cannot do, so unpack it instead.
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem pime\*.exe | Select-Object -First 1
+          7z x $setup.FullName -opime\x -y | Out-Null
+          $launcher = Get-ChildItem pime\x -Recurse -Filter PIMELauncher.exe | Select-Object -First 1
+          if (-not $launcher) { Get-ChildItem pime\x -Recurse -Depth 2 | ForEach-Object FullName; throw "PIMELauncher.exe not found" }
+          $root = $launcher.DirectoryName
+          Get-ChildItem $root | ForEach-Object Name
+          $dest = "${env:ProgramFiles(x86)}\PIME"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          Copy-Item "$root\*" $dest -Recurse -Force
+          New-Item -Path "HKLM:\SOFTWARE\PIME" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\PIME" -Name "(default)" -Value $dest
+          foreach ($f in @("node\node.exe", "x64\PIMETextService.dll", "x86\PIMETextService.dll", "node\input_methods\McBopomofo\ime.json")) {
+            if (-not (Test-Path "$dest\$f")) { throw "Missing $f after unpacking PIME" }
+          }
+          $p = Start-Process "$env:WINDIR\System32\regsvr32.exe" -ArgumentList '/s', "`"$dest\x64\PIMETextService.dll`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "regsvr32 x64 failed: $($p.ExitCode)" }
+          $p = Start-Process "$env:WINDIR\SysWOW64\regsvr32.exe" -ArgumentList '/s', "`"$dest\x86\PIMETextService.dll`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "regsvr32 x86 failed: $($p.ExitCode)" }
+          & "$dest\node\node.exe" --version
+
+      - name: Install MixZhuyin silently
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem setup\*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)" }
+
+      - name: Check the installation
+        shell: pwsh
+        run: |
+          $dest = "${env:ProgramFiles(x86)}\PIME"
+          $ime = "$dest\node\input_methods\MixZhuyin"
+          foreach ($f in @("ime.json", "index.js", "icon.ico", "Uninstall-MixZhuyin.exe")) {
+            if (-not (Test-Path "$ime\$f")) { throw "Missing $f" }
+          }
+          $guid = (Get-Content "$ime\ime.json" -Raw | ConvertFrom-Json).guid
+          $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\{35F67E9D-A54D-4177-9697-8B0AB71A9E04}\LanguageProfile\0x00000404"
+          Get-ChildItem $tip | ForEach-Object PSChildName
+          if (-not (Test-Path "$tip\$guid")) { throw "MixZhuyin profile $guid is not registered" }
+          if (-not (Test-Path "$tip\{5340C1D9-706E-4B6B-B022-2E763FA5F674}")) { throw "McBopomofo profile disappeared" }
+          if (-not (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MixZhuyin")) { throw "Uninstall entry missing" }
+          "MixZhuyin is registered as $guid"
+
+      - name: Type through PIME's Node.js
+        shell: pwsh
+        run: |
+          $dest = "${env:ProgramFiles(x86)}\PIME"
+          & "$dest\node\node.exe" windows\e2e\type_test.js "$dest\node\input_methods\MixZhuyin\index.js"
+          if ($LASTEXITCODE -ne 0) { throw "Typing test failed" }
+
+      - name: Uninstall MixZhuyin silently
+        shell: pwsh
+        run: |
+          $dest = "${env:ProgramFiles(x86)}\PIME"
+          $p = Start-Process "$dest\node\input_methods\MixZhuyin\Uninstall-MixZhuyin.exe" -ArgumentList '/S' -Wait -PassThru
+          # The uninstaller copies itself to a temporary Au_.exe and runs from there.
+          Start-Sleep -Seconds 2
+          Wait-Process -Name "Au_" -Timeout 180 -ErrorAction SilentlyContinue
+
+      - name: Check the uninstallation
+        shell: pwsh
+        run: |
+          $dest = "${env:ProgramFiles(x86)}\PIME"
+          $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\{35F67E9D-A54D-4177-9697-8B0AB71A9E04}\LanguageProfile\0x00000404"
+          Get-ChildItem $tip | ForEach-Object PSChildName
+          if (Test-Path "$dest\node\input_methods\MixZhuyin\ime.json") { throw "MixZhuyin files remain" }
+          if (Test-Path "$tip\{99F99D2E-4C0A-4E5E-BAE6-2876AEFC9A94}") { throw "MixZhuyin profile remains registered" }
+          if (-not (Test-Path "$tip\{5340C1D9-706E-4B6B-B022-2E763FA5F674}")) { throw "McBopomofo profile was removed" }
+          if (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MixZhuyin") { throw "Uninstall entry remains" }
+          # The per-user profile list must stay numbered 1..N (gaps crash Windows 11's switcher).
+          $up = "HKCU:\Control Panel\International\User Profile\zh-Hant-TW"
+          if (Test-Path $up) {
+            $key = Get-Item $up
+            $nums = $key.Property | Where-Object { $_ -match '^[0-9A-Fa-f]{4}:\{' } | ForEach-Object { [int]$key.GetValue($_) } | Sort-Object
+            "User profile order: $($nums -join ', ')"
+            for ($i = 0; $i -lt $nums.Count; $i++) { if ($nums[$i] -ne $i + 1) { throw "User profile numbering has a gap" } }
+          }
+          "Uninstalled cleanly"

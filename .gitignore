@@ -24,3 +24,4 @@ openvanilla-mcbopomofoweb-*.tgz
 .playwright-mcp
 test-results
 .antigravityclioutput/mixed-demo/bundle.js*
+windows/build/

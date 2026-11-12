@@ -328,6 +328,8 @@ export class KeyHandler {
     switch (key.name) {
       case KeyName.RETURN: {
         if (c.isEmpty) {
+          // A new line: nothing before the next composition to space from.
+          c.precedingCharacter = "\n";
           return false;
         }
         stateCallback(new Committing(c.commit()));
@@ -378,12 +380,15 @@ export class KeyHandler {
       case KeyName.PAGE_UP:
       case KeyName.PAGE_DOWN:
         if (c.isEmpty) {
+          // The caret moves somewhere we cannot see.
+          c.precedingCharacter = "";
           return false;
         }
         stateCallback(this.mixedState_());
         return true;
       case KeyName.DOWN: {
         if (c.isEmpty) {
+          c.precedingCharacter = "";
           return false;
         }
         const list = c.candidates();
@@ -409,6 +414,7 @@ export class KeyHandler {
       }
       case KeyName.TAB:
         if (c.isEmpty) {
+          c.precedingCharacter = "";
           return false;
         }
         if (!c.acceptPrediction()) {
