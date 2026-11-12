@@ -1,0 +1,43 @@
+/**
+ * @license
+ * Copyright (c) 2022 and onwards The McBopomofo Authors.
+ * This code is released under the MIT license.
+ * SPDX-License-Identifier: MIT
+ * The main entrance of the IME for ChromeOS.
+ */
+
+/**
+ * @license
+ * Copyright (c) 2022 and onwards The McBopomofo Authors.
+ * This code is released under the MIT license.
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
+ * @license
+ * Copyright (c) 2026 and onwards The MixZhuyin Authors.
+ * This code is released under the MIT license.
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
+ * @license
+ * English word frequencies for mixed Chinese/English input.
+ *
+ * Derived from wordfreq (https://github.com/rspeer/wordfreq) by Robyn Speer,
+ * whose data is licensed under CC BY-SA 4.0, filtered with the word list from
+ * an-array-of-english-words (MIT). THIS FILE (the data) is licensed under
+ * CC BY-SA 4.0; see NOTICE.md.
+ *
+ * Format: one entry per line, "word zipf*100". A penalty of 1.0 zipf has
+ * already been applied to words that are not in the dictionary word list.
+ */
+
+/**
+ * @license
+ * Lodash <https://lodash.com/>
+ * Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
+ * Released under MIT license <https://lodash.com/license>
+ * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+ * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+ */
