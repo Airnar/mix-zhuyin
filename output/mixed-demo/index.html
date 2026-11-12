@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中英混打注音輸入法</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* 版面：打字區是主角放最上面；下方左邊是「判斷過程」，右邊是試打範例；再下面是大千鍵盤對照 */
+  --paper: #edf0f3;
+  --surface: #ffffff;
+  --ink: #16212c;
+  --muted: #5a6775;
+  --line: #d3dae2;
+  --zh: #b3262d;
+  --zh-soft: #fbe8e8;
+  --en: #1a5cab;
+  --en-soft: #e4edf9;
+  --hi: #e3a53a;
+  --font-display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12171d; --surface: #1b222b; --ink: #e7ecf1; --muted: #9aa7b5; --line: #2e3844;
+    --zh: #f0777a; --zh-soft: #3a1f23; --en: #7fb1f0; --en-soft: #1b2a3e; --hi: #e7b25a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12171d; --surface: #1b222b; --ink: #e7ecf1; --muted: #9aa7b5; --line: #2e3844;
+  --zh: #f0777a; --zh-soft: #3a1f23; --en: #7fb1f0; --en-soft: #1b2a3e; --hi: #e7b25a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 56px; display: grid; gap: 22px; }
+header { display: grid; gap: 6px; }
+h1 { font-family: var(--font-display); font-weight: 900; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.15; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h1 .z { color: var(--zh); } h1 .e { color: var(--en); }
+.sub { margin: 0; color: var(--muted); max-width: 62ch; }
+.sub b { color: var(--ink); font-weight: 500; }
+h2 { font-size: 15px; font-weight: 700; margin: 0 0 10px; letter-spacing: .04em; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* 打字區 */
+.editor-card { padding: 0; overflow: hidden; }
+#editor { min-height: 168px; padding: 22px 24px 18px; font-size: 26px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; }
+#editor:focus-visible { box-shadow: inset 0 0 0 2px var(--hi); }
+#editor .committed { color: var(--ink); }
+#editor .loading { color: var(--muted); font-size: 18px; }
+.comp { border-bottom: 2px solid var(--muted); }
+.tok-zh { color: var(--zh); background: var(--zh-soft); border-radius: 3px; }
+.tok-en { color: var(--en); background: var(--en-soft); border-radius: 3px; font-family: var(--font-mono); font-size: .9em; }
+.tok-pend { color: var(--zh); font-size: .8em; letter-spacing: .05em; opacity: .85; }
+.u { cursor: pointer; border-radius: 3px; }
+.u.focus { box-shadow: 0 0 0 2px var(--hi); }
+.ghost { color: var(--muted); opacity: .55; font-family: var(--font-mono); font-size: .9em; }
+.ghost kbd { font-size: 11px; vertical-align: middle; margin-left: 6px; opacity: 1; }
+.caret { display: inline-block; width: 2px; height: 1.1em; background: var(--ink); vertical-align: -0.18em; margin-left: 1px; animation: blink 1.05s steps(1) infinite; }
+#editor:not(:focus) .caret { opacity: .25; animation: none; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+
+#cands { display: none; border-top: 1px solid var(--line); padding: 10px 16px; gap: 6px; flex-wrap: wrap; align-items: center; background: var(--paper); }
+#cands.open { display: flex; }
+.cand { font: inherit; font-size: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 4px 10px; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; }
+.cand .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.cand.sel { border-color: var(--hi); box-shadow: 0 0 0 1px var(--hi); }
+.cand.flip { font-size: 14px; color: var(--muted); }
+.cand-page { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+
+.statusbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.mode { font-weight: 500; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line); color: var(--ink); white-space: nowrap; }
+.mode.lock { border-color: var(--en); color: var(--en); }
+.hints { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--ink); }
+.actions { margin-left: auto; display: flex; gap: 8px; }
+button.btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+button.btn:hover, .cand:hover, .ex:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--hi); outline-offset: 2px; }
+#imewarn { display: none; padding: 10px 16px; background: #fff3d6; color: #6b4a00; font-size: 14px; border-top: 1px solid #f0d58f; }
+#imewarn.show { display: block; }
+
+/* 判斷過程 */
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; }
+.panel { padding: 16px 18px 18px; }
+#chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 64px; align-content: flex-start; }
+.chip { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; padding: 6px 10px 6px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.chip .lang { grid-row: 1 / 3; align-self: stretch; display: grid; place-items: center; width: 26px; border-radius: 5px; font-size: 13px; font-weight: 700; color: #fff; }
+.chip.zh .lang { background: var(--zh); } .chip.en .lang { background: var(--en); }
+.chip.other .lang { background: var(--muted); }
+.chip.zh .t { color: var(--zh); } .chip.en .t { color: var(--en); font-family: var(--font-mono); }
+.chip .t { font-size: 18px; line-height: 1.3; white-space: nowrap; }
+.chip .meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; display: flex; gap: 8px; }
+.chip .meta .p { color: var(--ink); font-variant-numeric: tabular-nums; }
+.chip.unsure { border-color: var(--hi); }
+.empty { color: var(--muted); font-size: 14px; }
+.explain { font-size: 13.5px; color: var(--muted); margin: 12px 0 0; }
+.explain code { font-family: var(--font-mono); color: var(--ink); }
+
+#examples { display: grid; gap: 8px; }
+.ex { font: inherit; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 12px; cursor: pointer; display: grid; gap: 1px; }
+.ex .k { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.ex .s { font-size: 16px; }
+
+/* 鍵盤 */
+.kb-card { padding: 16px 18px 18px; }
+.kb { display: grid; gap: 6px; max-width: 860px; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+.row { display: flex; gap: 6px; }
+.row:nth-child(2) { padding-left: 3%; } .row:nth-child(3) { padding-left: 6%; }
+.key { flex: 1 1 0; min-width: 0; height: 54px; border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; display: grid; place-items: center; padding: 2px 0; position: relative; touch-action: manipulation; }
+.key .zy { font-size: 19px; line-height: 1; }
+.key .lt { position: absolute; top: 3px; left: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.key.tone .zy { color: var(--zh); font-size: 22px; }
+.key.wide { flex-grow: 1.7; font-size: 13px; }
+.key.space { flex-grow: 6; font-size: 13px; color: var(--muted); }
+.key.fn { font-size: 13px; color: var(--muted); }
+.key.on { border-color: var(--en); color: var(--en); }
+.key.hit, .key:active { background: var(--hi); color: #1b1300; border-color: var(--hi); }
+.key.hit .lt, .key:active .lt { color: #1b1300; }
+.kb-note { text-align: center; font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+
+/* 原理 */
+.how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.how .step { padding: 16px 18px; }
+.how .num { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.how h3 { margin: 2px 0 6px; font-size: 17px; text-wrap: balance; }
+.how p { margin: 0; font-size: 14.5px; color: var(--muted); }
+.how code, .notes code { font-family: var(--font-mono); font-size: 13px; color: var(--ink); background: var(--paper); padding: 0 4px; border-radius: 4px; }
+.notes { font-size: 13.5px; color: var(--muted); display: grid; gap: 4px; max-width: 80ch; }
+.notes p { margin: 0; }
+.notes a { color: var(--en); }
+
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+#toast.show { opacity: 1; }
+
+@media (max-width: 760px) {
+  .grid2, .how { grid-template-columns: 1fr; }
+  #editor { font-size: 22px; padding: 16px; }
+  .key { height: 46px; } .key .zy { font-size: 16px; } .key .lt { font-size: 9px; left: 3px; }
+  .row { gap: 4px; } .kb { gap: 4px; }
+  .actions { margin-left: 0; }
+}
+
+.layout-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 6px; font-size: 14px; }
+.layout-row label { color: var(--muted); }
+.layout-row select { font: inherit; font-size: 15px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.layout-row .check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); }
+.tok-zh.focus, .tok-en.focus, .tok-pend.focus { box-shadow: 0 0 0 2px var(--hi); border-radius: 3px; }
+.key.multi .zy { font-size: 14px; letter-spacing: .02em; }
+.row:last-child .key.fn { flex-grow: 1.2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="z">中</span><span class="e">英</span>混打注音輸入法</h1>
+    <p class="sub">用注音鍵盤直接打，<b>中文、英文自動判斷，不用切換</b>。這一版跑的是正式核心（小麥注音詞庫＋混打判斷），可以切換鍵盤配置。<br>請先把電腦的輸入法切到<b>英文（ENG）</b>，再點下方打字區開始打。</p>
+    <div class="layout-row">
+      <label for="layout">鍵盤配置</label>
+      <select id="layout">
+        <option value="Standard">大千（標準）</option>
+        <option value="ETen">倚天</option>
+        <option value="Hsu">許氏</option>
+        <option value="IBM">IBM</option>
+        <option value="ETen26">倚天 26 鍵</option>
+      </select>
+      <label class="check"><input type="checkbox" id="autospace" checked> 中英之間自動加空白</label>
+    </div>
+  </header>
+
+  <section class="card editor-card" aria-label="打字區">
+    <div id="editor" tabindex="0" role="textbox" aria-multiline="true" aria-label="打字區"><span class="loading">載入詞庫中…</span></div>
+    <div id="cands" role="listbox" aria-label="選字"></div>
+    <div id="imewarn">偵測到系統輸入法還開著（例如微軟注音）。請按 <kbd>Shift</kbd> 或 <kbd>Ctrl</kbd>+<kbd>Space</kbd> 把系統輸入法切成英文，這個頁面才收得到按鍵。</div>
+    <div class="statusbar">
+      <span id="mode" class="mode">自動判斷</span>
+      <span class="hints">
+        <span><kbd>Enter</kbd> 送出</span>
+        <span><kbd>↓</kbd> 選字</span>
+        <span><kbd>←</kbd><kbd>→</kbd> 移動</span>
+        <span><kbd>Shift</kbd> 單按：中英互換</span>
+        <span><kbd>Tab</kbd> 接受英文預測</span>
+        <span><kbd>Esc</kbd> 取消</span>
+      </span>
+      <span class="actions">
+        <button class="btn" id="copy" type="button">複製全文</button>
+        <button class="btn" id="clear" type="button">清除</button>
+      </span>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <section class="card panel" aria-labelledby="h-judge">
+      <h2 id="h-judge">判斷過程（還沒送出的這一段）</h2>
+      <div id="chips"></div>
+      <p class="explain" id="explain"></p>
+    </section>
+    <section class="card panel" aria-labelledby="h-ex">
+      <h2 id="h-ex">試打範例（點一下會用目前的鍵盤配置逐鍵打出來）</h2>
+      <div id="examples"></div>
+    </section>
+  </div>
+
+  <section class="card kb-card" aria-labelledby="h-kb">
+    <h2 id="h-kb"><span id="kb-name">大千</span>鍵盤（實體鍵盤按下會亮，也可以直接點）</h2>
+    <div class="kb" id="kb"></div>
+    <p class="kb-note" id="kb-note"></p>
+  </section>
+
+  <section aria-labelledby="h-how">
+    <h2 id="h-how">它怎麼判斷是中文還是英文</h2>
+    <div class="how">
+      <div class="card step"><div class="num">1</div><h3>同一串按鍵，兩種讀法</h3><p>每個按鍵同時代表注音和英文字母。按鍵順序必須跟該鍵盤配置打出那個注音的順序完全一樣才算數，所以英文單字很少剛好被讀成注音。</p></div>
+      <div class="card step"><div class="num">2</div><h3>算整串的機率</h3><p>中文用小麥注音詞庫的詞頻、英文用英文詞頻，把整串切成「中文詞＋英文字」的各種組合，挑機率最高的一種。中英切換一次會扣一點分，避免亂跳。</p></div>
+      <div class="card step"><div class="num">3</div><h3>每按一鍵就重算</h3><p>打 <code>up</code> 時先顯示英文 up，接著打出「為」就整段重算成「因為」。判斷錯了按 <kbd>Shift</kbd> 單按翻過來，送出後它會記住你的選擇。</p></div>
+    </div>
+  </section>
+
+  <section class="notes" aria-label="說明">
+    <p>測試集 146 句的中英判斷正確數：大千 146、許氏 145、IBM 145、倚天 144、倚天 26 鍵 144。選字目前只用詞頻，同音字偶爾選錯，用 <kbd>↓</kbd> 修正；下一步會加本機語言模型做整句選字。</p>
+    <p>資料來源：中文詞庫來自 <a href="https://github.com/openvanilla/McBopomofo">小麥注音 McBopomofo</a>（MIT）；英文詞頻來自 <a href="https://github.com/rspeer/wordfreq">wordfreq</a>（CC BY-SA 4.0）。所有判斷都在瀏覽器裡完成，打的字不會送出去。</p>
+  </section>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="bundle.js"></script>
+<script>
+const M = window.mixzhuyin;
+const DEMO = {"examples":[[{"lang":"zh","text":"我今天要開","reading":"ㄨㄛˇ-ㄐㄧㄣ-ㄊㄧㄢ-ㄧㄠˋ-ㄎㄞ"},{"lang":"en","text":"meeting"}],[{"lang":"zh","text":"幫我","reading":"ㄅㄤ-ㄨㄛˇ"},{"lang":"en","text":"check"},{"lang":"zh","text":"一下這個","reading":"ㄧ-ㄒㄧㄚˋ-ㄓㄜˋ-ㄍㄜ˙"},{"lang":"en","text":"bug"}],[{"lang":"en","text":"I love you"}],[{"lang":"zh","text":"你有用過","reading":"ㄋㄧˇ-ㄧㄡˇ-ㄩㄥˋ-ㄍㄨㄛˋ"},{"lang":"en","text":"ChatGPT"},{"lang":"zh","text":"嗎","reading":"ㄇㄚ˙"}],[{"lang":"zh","text":"我想吃","reading":"ㄨㄛˇ-ㄒㄧㄤˇ-ㄔ"},{"lang":"en","text":"pizza"}],[{"lang":"zh","text":"因為下雨所以不去了","reading":"ㄧㄣ-ㄨㄟˋ-ㄒㄧㄚˋ-ㄩˇ-ㄙㄨㄛˇ-ㄧˇ-ㄅㄨˊ-ㄑㄩˋ-ㄌㄜ˙"}],[{"lang":"en","text":"Sorry"},{"lang":"zh","text":"讓你久等了","reading":"ㄖㄤˋ-ㄋㄧˇ-ㄐㄧㄡˇ-ㄉㄥˇ-ㄌㄜ˙"}],[{"lang":"zh","text":"先","reading":"ㄒㄧㄢ"},{"lang":"en","text":"reboot"},{"lang":"zh","text":"看看","reading":"ㄎㄢˋ-ㄎㄢˋ"}]],"initial":[{"lang":"zh","text":"明天的","reading":"ㄇㄧㄥˊ-ㄊㄧㄢ-ㄉㄜ˙"},{"lang":"en","text":"presentation"},{"lang":"zh","text":"準備好了嗎","reading":"ㄓㄨㄣˇ-ㄅㄟˋ-ㄏㄠˇ-ㄌㄜ˙-ㄇㄚ˙"},{"lang":"raw","text":">"}]};
+const $ = (id) => document.getElementById(id);
+const editor = $("editor");
+const PER_PAGE = 9;
+const LAYOUT_LABEL = { Standard: "大千", ETen: "倚天", Hsu: "許氏", IBM: "IBM", ETen26: "倚天 26 鍵" };
+const S = { committed: "", composer: null, cand: null, shiftAlone: false, oneShot: false, playing: false, layoutKey: "Standard" };
+let lm = null, english = null;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 1800);
+}
+function esc(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function layout() { return M.BopomofoKeyboardLayout[S.layoutKey + "Layout"]; }
+
+function loadLearning() { try { return localStorage.getItem("mixzhuyin.learning") || ""; } catch (e) { return ""; } }
+function saveLearning() { try { localStorage.setItem("mixzhuyin.learning", S.composer.exportLearning()); } catch (e) {} }
+
+function makeComposer() {
+  const learned = S.composer ? S.composer.exportLearning() : loadLearning();
+  const d = new M.MixedDecoder(lm, english, layout());
+  d.punctuationLookup = (k) => {
+    for (const key of ["_punctuation_" + S.layoutKey + "_" + k, "_punctuation_" + k]) {
+      const u = lm.getUnigrams(key);
+      if (u.length) return u[0].value;
+    }
+    return undefined;
+  };
+  const c = new M.MixedComposer(d);
+  if (learned) c.importLearning(learned);
+  c.autoSpace = $("autospace").checked;
+  c.precedingCharacter = S.committed.slice(-8);
+  const lock = S.composer ? S.composer.englishLock : false;
+  c.englishLock = lock;
+  S.composer = c;
+}
+
+// ---------- actions ----------
+function commit() {
+  const c = S.composer;
+  if (c.isEmpty) return;
+  c.precedingCharacter = S.committed.slice(-8);
+  S.committed += c.commit();
+  saveLearning();
+}
+function insert(ch, numpad) {
+  const c = S.composer;
+  if (S.oneShot && /[a-z]/.test(ch)) { ch = ch.toUpperCase(); S.oneShot = false; }
+  if (c.isEmpty) c.precedingCharacter = S.committed.slice(-8);
+  c.insert(ch, !!numpad);
+  const ov = c.commitOverflow();
+  if (ov) S.committed += ov;
+}
+function shiftTap() {
+  const c = S.composer;
+  if (c.isEmpty) {
+    c.englishLock = !c.englishLock;
+    toast(c.englishLock ? "英文鎖定：接下來打的都當英文（再按一次 Shift 解除）" : "回到自動判斷");
+  } else if (!c.flip()) {
+    toast("這一段沒辦法換成另一種語言");
+  }
+  render();
+}
+function openCands() {
+  const list = S.composer.candidates();
+  if (!list.length) { toast("這一段沒有其他選項"); return; }
+  S.cand = { list, page: 0, sel: 0 };
+  render();
+}
+function pick(item) {
+  if (!item) return;
+  S.cand = null;
+  if (!S.composer.selectCandidate(item)) toast("沒辦法換成這個");
+  render();
+}
+
+function handleKey(key, code) {
+  if (!S.composer) return false;
+  const c = S.composer;
+  if (S.cand) {
+    const k = S.cand, pages = Math.ceil(k.list.length / PER_PAGE);
+    const pageItems = k.list.slice(k.page * PER_PAGE, k.page * PER_PAGE + PER_PAGE);
+    if (/^[1-9]$/.test(key)) { pick(pageItems[+key - 1]); return true; }
+    if (key === "ArrowDown") { k.sel = Math.min(k.sel + 1, k.list.length - 1); k.page = Math.floor(k.sel / PER_PAGE); render(); return true; }
+    if (key === "ArrowUp") { if (k.sel === 0) S.cand = null; else { k.sel--; k.page = Math.floor(k.sel / PER_PAGE); } render(); return true; }
+    if (key === "ArrowRight" || key === "PageDown") { if (k.page < pages - 1) { k.page++; k.sel = k.page * PER_PAGE; } render(); return true; }
+    if (key === "ArrowLeft" || key === "PageUp") { if (k.page > 0) { k.page--; k.sel = k.page * PER_PAGE; } render(); return true; }
+    if (key === "Enter" || key === " ") { pick(k.list[k.sel]); return true; }
+    if (key === "Escape") { S.cand = null; render(); return true; }
+    S.cand = null;
+  }
+  switch (key) {
+    case "Enter": if (!c.isEmpty) commit(); else S.committed += "\n"; render(); return true;
+    case "Backspace":
+      if (!c.backspace()) { const a = Array.from(S.committed); a.pop(); S.committed = a.join(""); }
+      render(); return true;
+    case "Escape": c.clear(); render(); return true;
+    case "Tab": c.acceptPrediction(); render(); return true;
+    case "ArrowDown": if (!c.isEmpty) openCands(); return true;
+    case "ArrowUp": return true;
+    case "ArrowLeft": c.moveFocus(-1); render(); return true;
+    case "ArrowRight": c.moveFocus(1); render(); return true;
+  }
+  if (key.length !== 1) return false;
+  insert(key, code && /^Numpad\d$/.test(code));
+  render();
+  return true;
+}
+
+// ---------- rendering ----------
+function render() {
+  const c = S.composer;
+  if (!c) return;
+  let h = '<span class="committed">' + esc(S.committed) + "</span>";
+  if (!c.isEmpty) {
+    const v = c.view();
+    h += '<span class="comp">';
+    for (const seg of v.segments) {
+      const cls = seg.pending ? "tok-pend" : seg.lang === "zh" ? "tok-zh" : seg.lang === "en" ? "tok-en" : "";
+      const text = seg.lang === "en" ? seg.text.replace(/ $/, "") : seg.text;
+      const tail = seg.lang === "en" && seg.text.endsWith(" ") ? " " : "";
+      h += cls ? '<span class="' + cls + (seg.focused ? " focus" : "") + '">' + esc(text) + "</span>" + tail : esc(seg.text);
+    }
+    h += "</span>";
+    const toks = c.tokens, last = toks[toks.length - 1];
+    if (v.prediction && last && last.word && !S.cand) h += '<span class="ghost">' + esc(v.prediction.slice(last.word.length)) + "<kbd>Tab</kbd></span>";
+  }
+  h += '<span class="caret"></span>';
+  editor.innerHTML = h;
+
+  const cd = $("cands");
+  if (S.cand) {
+    const k = S.cand, pages = Math.ceil(k.list.length / PER_PAGE);
+    const items = k.list.slice(k.page * PER_PAGE, k.page * PER_PAGE + PER_PAGE);
+    cd.innerHTML = items.map((it, i) => {
+      const gi = k.page * PER_PAGE + i;
+      return '<button type="button" class="cand' + (gi === k.sel ? " sel" : "") + (it.kind === "flip" ? " flip" : "") + '" data-i="' + gi + '" role="option" aria-selected="' + (gi === k.sel) + '"><span class="n">' + (i + 1) + "</span>" + esc(it.label) + "</button>";
+    }).join("") + '<span class="cand-page">' + (k.page + 1) + "/" + pages + "　數字鍵選字・←→ 翻頁・Esc 關閉</span>";
+    cd.classList.add("open");
+  } else { cd.classList.remove("open"); cd.innerHTML = ""; }
+
+  $("mode").textContent = c.englishLock ? "英文鎖定" : "自動判斷";
+  $("mode").classList.toggle("lock", c.englishLock);
+  const sk = document.querySelector('[data-key="Shift"]');
+  if (sk) sk.classList.toggle("on", S.oneShot);
+  renderChips();
+}
+
+const LANGNAME = { zh: "中", en: "英" };
+function renderChips() {
+  const c = S.composer, box = $("chips"), ex = $("explain");
+  if (c.isEmpty) {
+    box.innerHTML = '<span class="empty">開始打字後，這裡會即時顯示每一段被判斷成中文或英文，以及有多確定。</span>';
+    ex.innerHTML = ""; return;
+  }
+  let h = "", unsure = null;
+  for (const t of c.tokens) {
+    if (t.type === "space") continue;
+    const keys = c.raw.slice(t.start, t.end).replace(/ /g, "␣");
+    if (t.type === "pend") { h += '<div class="chip zh"><span class="lang">注</span><span class="t">' + esc(t.output) + '</span><span class="meta"><span>' + esc(keys) + "</span><span>等聲調</span></span></div>"; continue; }
+    if (!t.lang) { h += '<div class="chip other"><span class="lang">' + (t.type === "num" ? "數" : "符") + '</span><span class="t">' + esc(t.output) + '</span><span class="meta"><span>' + esc(keys) + "</span></span></div>"; continue; }
+    const cf = c.confidence(t);
+    let pct;
+    if (cf.manual) pct = "手動指定";
+    else if (cf.probability >= 0.995) pct = cf.alternative ? ">99%" : "只可能是" + (t.lang === "zh" ? "中文" : "英文");
+    else pct = Math.round(cf.probability * 100) + "%";
+    const isUnsure = !cf.manual && cf.probability < 0.8;
+    if (isUnsure && cf.alternative && (!unsure || cf.probability < unsure.p)) unsure = { p: cf.probability, t, alt: cf.alternative };
+    h += '<div class="chip ' + t.lang + (isUnsure ? " unsure" : "") + '" title="' + (cf.alternative ? "另一種讀法：" + esc(cf.alternative) : "") + '"><span class="lang">' + LANGNAME[t.lang] + '</span><span class="t">' + esc(t.output.replace(/ $/, "")) + '</span><span class="meta"><span>' + esc(keys) + '</span><span class="p">' + pct + "</span></span></div>";
+  }
+  box.innerHTML = h;
+  ex.innerHTML = unsure
+    ? "「" + esc(unsure.t.output.trim()) + "」比較沒把握，另一種讀法是「" + esc(unsure.alt.trim()) + "」。要換的話把游標移過去按 <kbd>Shift</kbd>。"
+    : "百分比是「這段是這個語言」的機率，用另一種語言重算整串後比較得出。滑鼠停在方塊上可以看到另一種讀法。";
+}
+
+// ---------- keyboard ----------
+const ROWS = [
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "Backspace"],
+  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+  ["a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "Enter"],
+  ["Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/"],
+  ["Flip", "ArrowLeft", " ", "ArrowRight", "ArrowDown", "Tab"],
+];
+const FN = { Backspace: "⌫", Enter: "↵ 送出", Shift: "⇧ 大寫", Flip: "⇄ 中英", " ": "一聲 ／ 空白", ArrowDown: "↓ 選字", ArrowLeft: "←", ArrowRight: "→", Tab: "Tab 補完" };
+function keyInfo(k) {
+  const cm = M.BopomofoCharacterMap.sharedInstance;
+  const comps = layout().keyToComponents(k);
+  const chars = comps.map((c) => cm.componentToCharacter.get(c) || "").filter(Boolean);
+  const tone = comps.some((c) => new M.BopomofoSyllable(c).hasToneMarker);
+  return { chars, tone };
+}
+function buildKb() {
+  $("kb-name").textContent = LAYOUT_LABEL[S.layoutKey];
+  $("kb").innerHTML = ROWS.map((r) => '<div class="row">' + r.map((k) => {
+    if (FN[k]) {
+      const cls = k === " " ? "space" : (k === "Backspace" || k === "Enter" || k === "Shift") ? "wide" : "fn";
+      return '<button type="button" class="key ' + cls + '" data-key="' + esc(k) + '">' + FN[k] + "</button>";
+    }
+    const { chars, tone } = keyInfo(k);
+    const zy = chars.join(" ");
+    return '<button type="button" class="key' + (tone ? " tone" : "") + (chars.length > 1 ? " multi" : "") + '" data-key="' + esc(k) + '" aria-label="' + esc(k + " " + zy) + '"><span class="lt">' + esc(k) + '</span><span class="zy">' + esc(zy) + "</span></button>";
+  }).join("") + "</div>").join("");
+  const tones = [];
+  for (const k of "1234567890-qwertyuiopasdfghjkl;zxcvbnm,./") {
+    for (const c of layout().keyToComponents(k)) {
+      const s = new M.BopomofoSyllable(c);
+      if (s.hasToneMarker) tones.push("<code>" + esc(k) + "</code>＝" + M.BopomofoCharacterMap.sharedInstance.componentToCharacter.get(c));
+    }
+  }
+  $("kb-note").innerHTML = "紅色是聲調鍵：空白＝一聲、" + tones.join("、") + "。一個鍵有兩個符號時，依前後按鍵決定。右側數字鍵盤打的數字一定當數字。";
+}
+function flash(k) {
+  const sel = k === " " ? '[data-key=" "]' : '[data-key="' + CSS.escape(k.length === 1 ? k.toLowerCase() : k) + '"]';
+  const b = document.querySelector("#kb " + sel);
+  if (!b) return;
+  b.classList.add("hit"); setTimeout(() => b.classList.remove("hit"), 140);
+}
+const SHIFTED = { "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0", _: "-", "<": ",", ">": ".", "?": "/", ":": ";" };
+
+// ---------- examples ----------
+function keysFor(segs) {
+  let keys = "";
+  segs.forEach((s, i) => {
+    if (s.lang === "zh") keys += M.keysForReading(s.reading, layout());
+    else if (s.lang === "en") { keys += s.text; if (i < segs.length - 1 && segs[i + 1].lang === "zh") keys += " "; else if (i < segs.length - 1) keys += " "; }
+    else keys += s.text;
+  });
+  return keys;
+}
+function buildExamples() {
+  $("examples").innerHTML = DEMO.examples.map((segs, i) =>
+    '<button type="button" class="ex" data-i="' + i + '"><span class="s">' + esc(segs.map((s, i) => (i > 0 && s.lang !== segs[i - 1].lang && s.lang !== "raw" ? " " : "") + s.text).join("")) + '</span><span class="k">' + esc(keysFor(segs).replace(/ /g, "␣")) + "</span></button>"
+  ).join("");
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function play(keys) {
+  if (S.playing || !S.composer) return;
+  S.playing = true;
+  if (!S.composer.isEmpty) commit();
+  if (S.committed && !S.committed.endsWith("\n")) S.committed += "\n";
+  render();
+  const fast = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  editor.focus({ preventScroll: true });
+  for (const ch of keys) { handleKey(ch); flash(ch); if (!fast) await sleep(ch === " " ? 120 : 85); }
+  S.playing = false;
+}
+
+// ---------- events ----------
+editor.addEventListener("keydown", (e) => {
+  if (!S.composer) return;
+  if (e.isComposing || e.key === "Process" || e.keyCode === 229) { $("imewarn").classList.add("show"); e.preventDefault(); return; }
+  $("imewarn").classList.remove("show");
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Shift") { if (!e.repeat) S.shiftAlone = true; return; }
+  S.shiftAlone = false;
+  if (S.playing) { e.preventDefault(); return; }
+  flash(SHIFTED[e.key] || e.key);
+  if (handleKey(e.key, e.code)) e.preventDefault();
+});
+editor.addEventListener("keyup", (e) => { if (e.key === "Shift" && S.shiftAlone) { S.shiftAlone = false; shiftTap(); } });
+editor.addEventListener("blur", () => { S.shiftAlone = false; });
+editor.addEventListener("click", () => editor.focus({ preventScroll: true }));
+$("cands").addEventListener("mousedown", (e) => e.preventDefault());
+$("cands").addEventListener("click", (e) => { const b = e.target.closest(".cand"); if (!b) return; pick(S.cand.list[+b.dataset.i]); editor.focus({ preventScroll: true }); });
+$("kb").addEventListener("mousedown", (e) => e.preventDefault());
+$("kb").addEventListener("click", (e) => {
+  const b = e.target.closest(".key"); if (!b) return;
+  const k = b.dataset.key;
+  if (k === "Shift") { S.oneShot = !S.oneShot; render(); }
+  else if (k === "Flip") shiftTap();
+  else handleKey(k);
+  flash(k);
+});
+$("examples").addEventListener("click", (e) => { const b = e.target.closest(".ex"); if (!b) return; play(keysFor(DEMO.examples[+b.dataset.i])); });
+$("copy").addEventListener("click", async () => {
+  const c = S.composer;
+  const text = S.committed + (c.isEmpty ? "" : c.view().text);
+  try { await navigator.clipboard.writeText(text); toast("已複製"); } catch (e) { toast("瀏覽器不允許複製，請手動選取"); }
+});
+$("clear").addEventListener("click", () => { S.committed = ""; S.composer.clear(); S.composer.precedingCharacter = ""; S.cand = null; render(); editor.focus({ preventScroll: true }); });
+$("layout").addEventListener("change", () => {
+  if (!S.composer.isEmpty) commit();
+  S.layoutKey = $("layout").value;
+  try { localStorage.setItem("mixzhuyin.layout", S.layoutKey); } catch (e) {}
+  makeComposer(); buildKb(); buildExamples(); render();
+  editor.focus({ preventScroll: true });
+});
+$("autospace").addEventListener("change", () => { S.composer.autoSpace = $("autospace").checked; render(); editor.focus({ preventScroll: true }); });
+
+function boot() {
+  try { const saved = localStorage.getItem("mixzhuyin.layout"); if (saved && LAYOUT_LABEL[saved]) S.layoutKey = saved; } catch (e) {}
+  $("layout").value = S.layoutKey;
+  lm = new M.WebLanguageModel(M.webData);
+  english = new M.EnglishModel(M.englishData);
+  makeComposer();
+  buildKb(); buildExamples();
+  // Opening state: one sentence already sent, one being typed.
+  for (const ch of keysFor(DEMO.initial)) S.composer.insert(ch);
+  commit();
+  S.committed += "\n";
+  for (const ch of keysFor(DEMO.examples[1])) insert(ch);
+  render();
+}
+setTimeout(boot, 0);
+</script>
+</body>
+
+</html>

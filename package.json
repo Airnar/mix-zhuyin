@@ -35,7 +35,8 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
-    "eslint": "eslint"
+    "eslint": "eslint",
+    "build:mixed-demo": "webpack --mode production --config webpack.config.mixeddemo.js"
   },
   "repository": {
     "type": "git",
