@@ -69,6 +69,14 @@
 <blockquote>
 <p>給譯者／詞庫維護者：<code>src/MixedInput/BigramData.ts</code> 是訓練產生的資料，請不要手改；要更新就重新跑訓練流程。它只影響混打模式的選字順序，不改變小麥注音詞庫本身。</p>
 </blockquote>
+<h2 id="安裝（windows）" class="tsd-anchor-link">安裝（Windows）<a href="#安裝（windows）" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>混打注音裝在 <a href="https://github.com/EasyIME/PIME">PIME</a> 輸入法平台裡（小麥注音的 Windows 版也是用 PIME）。</p>
+<ol>
+<li>到 <a href="https://github.com/EasyIME/PIME/releases">PIME Releases</a> 下載 PIME 安裝程式，安裝時選「<strong>完整安裝</strong>」，或至少勾選「小麥注音」（這樣才會裝 PIME 的 Node.js 與 Python 執行環境）。</li>
+<li>下載並執行 <code>MixZhuyin-&lt;版本&gt;-setup.exe</code>。安裝程式沒有數位簽章，Windows 會顯示 SmartScreen 警告，按「其他資訊 → 仍要執行」。</li>
+<li>按 <kbd>Win</kbd> + <kbd>空白鍵</kbd> 切換到「混打注音」。</li>
+</ol>
+<p>混打注音有自己的名稱與設定資料夾（<code>%APPDATA%\PIME\mixzhuyin</code>），可以和小麥注音同時安裝。解除安裝會保留你的使用者詞庫。</p>
 <h2 id="操作" class="tsd-anchor-link">操作<a href="#操作" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <table>
 <thead>
@@ -168,6 +176,7 @@
 <ul>
 <li><a href="#怎麼判斷中文還是英文"><span>怎麼判斷中文還是英文</span></a></li>
 <li><a href="#整句選字（本機語言模型）"><span>整句選字（本機語言模型）</span></a></li>
+<li><a href="#安裝（windows）"><span>安裝（<wbr/>Windows）</span></a></li>
 <li><a href="#操作"><span>操作</span></a></li>
 <li><a href="#判斷準確度"><span>判斷準確度</span></a></li>
 <li><a href="#開發"><span>開發</span></a></li>
