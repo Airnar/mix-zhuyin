@@ -20,6 +20,14 @@ wordfreq README for the full list and their terms.
 The file is filtered with the word list from an-array-of-english-words
 (https://github.com/words/an-array-of-english-words), MIT licensed.
 
+## Word-pair (bigram) model
+
+`src/MixedInput/BigramData.ts` and `src/MixedInput/testdata/heldout.txt`, once
+trained, are derived from Chinese Wikipedia (via the wikimedia/wikipedia
+dataset), converted to Taiwan Traditional Chinese with OpenCC. Wikipedia text
+is licensed under the Creative Commons Attribution-ShareAlike 4.0 license, and
+so are these derived files.
+
 ## Mixed input code
 
 The code under `src/MixedInput/` and the mixed-mode changes elsewhere are
