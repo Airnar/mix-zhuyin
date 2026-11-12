@@ -43,7 +43,7 @@
 
 混打注音裝在 [PIME](https://github.com/EasyIME/PIME) 輸入法平台裡（小麥注音的 Windows 版也是用 PIME）。
 
-1. 到 [PIME Releases](https://github.com/EasyIME/PIME/releases) 下載 PIME 安裝程式，安裝時選「**完整安裝**」，或至少勾選「小麥注音」（這樣才會裝 PIME 的 Node.js 與 Python 執行環境）。
+1. 到 [PIME Releases](https://github.com/EasyIME/PIME/releases) 下載 **PIME 2.0**（目前是 2.0.0-beta3，標示為 Pre-release；頁面上標「Latest」的 1.3.0 比較舊，內建的 Node.js 是 6 版）。安裝時選「**完整安裝**」，或至少勾選「小麥注音」，這樣才會裝 PIME 的 Node.js 與 Python 執行環境。
 2. 下載並執行 `MixZhuyin-<版本>-setup.exe`。安裝程式沒有數位簽章，Windows 會顯示 SmartScreen 警告，按「其他資訊 → 仍要執行」。
 3. 按 <kbd>Win</kbd> + <kbd>空白鍵</kbd> 切換到「混打注音」。
 
