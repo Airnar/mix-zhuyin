@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+export { bigramData } from "./BigramData";
+export { BigramModel, kSentenceStart } from "./BigramModel";
 export { englishData } from "./EnglishData";
 export { EnglishModel, ScoredWord } from "./EnglishModel";
 export {

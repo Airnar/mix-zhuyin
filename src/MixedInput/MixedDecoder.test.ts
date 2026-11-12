@@ -8,6 +8,7 @@
 import { BopomofoKeyboardLayout } from "../Mandarin";
 import { webData } from "../McBopomofo/WebData";
 import { WebLanguageModel } from "../McBopomofo/WebLanguageModel";
+import { BigramModel } from "./BigramModel";
 import { englishData } from "./EnglishData";
 import { EnglishModel } from "./EnglishModel";
 import { keysForReading, MixedDecoder, MixedTokenType } from "./MixedDecoder";
@@ -213,5 +214,71 @@ describe("MixedDecoder", () => {
         expect(exact / total).toBeGreaterThanOrEqual(0.9 * minShape);
       });
     }
+  });
+});
+
+describe("MixedDecoder with a bigram model", () => {
+  // 記得帶傘: unigrams alone pick 代 for ㄉㄞˋ.
+  const keys = keysForReading(
+    "ㄐㄧˋ-ㄉㄜ˙-ㄉㄞˋ-ㄙㄢˇ",
+    BopomofoKeyboardLayout.StandardLayout,
+  );
+
+  test("without a bigram model, unigrams decide", () => {
+    const d = makeDecoder();
+    expect(decodeText(d, keys)).toBe("記得代傘");
+  });
+
+  test("a bigram bonus picks the right homophone", () => {
+    const d = makeDecoder();
+    d.bigramModel = new BigramModel("帶\t傘 200\n");
+    expect(decodeText(d, keys)).toBe("記得帶傘");
+  });
+
+  test("the bigram weight scales the bonus", () => {
+    const d = makeDecoder();
+    d.bigramModel = new BigramModel("帶\t傘 200\n");
+    d.params.bigramWeight = 0;
+    expect(decodeText(d, keys)).toBe("記得代傘");
+  });
+
+  test("user picks stay pinned under rescoring", () => {
+    const d = makeDecoder();
+    d.bigramModel = new BigramModel("帶\t傘 200\n");
+    const r = d.decode(keys, {
+      final: true,
+      overrides: [
+        {
+          start: 6,
+          end: 9,
+          value: "待",
+          reading: "ㄉㄞˋ",
+          syllableStarts: [6, 9],
+        },
+      ],
+    });
+    expect(r.tokens.map((t) => t.output).join("")).toBe("記得待傘");
+  });
+
+  test("rescoring keeps raw ranges consistent", () => {
+    const d = makeDecoder();
+    d.bigramModel = new BigramModel("帶\t傘 200\n");
+    const r = d.decode(keys, { final: true });
+    let pos = 0;
+    for (const t of r.tokens) {
+      expect(t.start).toBe(pos);
+      pos = t.end;
+      if (t.syllables) {
+        expect(t.syllableStarts![0]).toBe(t.start);
+        expect(t.syllableStarts![t.syllables.length]).toBe(t.end);
+      }
+    }
+    expect(pos).toBe(keys.length);
+  });
+
+  test("English and Chinese around a rescored run are untouched", () => {
+    const d = makeDecoder();
+    d.bigramModel = new BigramModel("帶\t傘 200\n");
+    expect(decodeText(d, "ok " + keys + "please")).toBe("ok 記得帶傘please");
   });
 });

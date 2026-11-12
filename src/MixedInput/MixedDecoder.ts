@@ -7,6 +7,7 @@
 
 import { LanguageModel, Unigram } from "../Gramambular2";
 import { BopomofoKeyboardLayout, BopomofoSyllable } from "../Mandarin";
+import { BigramModel, kSentenceStart } from "./BigramModel";
 import { EnglishModel } from "./EnglishModel";
 
 /**
@@ -157,6 +158,26 @@ export class MixedDecoderParams {
   /** Predict even if the typed word exists, when the completion is this close. */
   predictionMargin = 0.6;
   maxPhraseSyllables = 6;
+  /** How much word-pair bonuses count (0 turns the bigram model off). */
+  bigramWeight = 1.0;
+  /** Phrases tried per reading when rescoring with the bigram model. */
+  bigramPhrasesPerReading = 8;
+  /** Partial sentences kept at each syllable when rescoring. */
+  bigramBeam = 12;
+}
+
+interface LatticeNode {
+  readonly start: number;
+  readonly end: number;
+  readonly value: string;
+  readonly score: number;
+  readonly pinned?: MixedToken;
+}
+
+interface Hypothesis {
+  readonly node: LatticeNode;
+  readonly score: number;
+  readonly prev: Hypothesis | null;
 }
 
 const kToneMarks = ["", "ˊ", "ˇ", "ˋ", "˙"];
@@ -191,6 +212,11 @@ export class MixedDecoder {
   readonly englishBias = new Map<string, number>();
   /** Learned per-phrase adjustments, keyed by "reading|value". */
   readonly phraseBias = new Map<string, number>();
+  /**
+   * Optional word-pair model. When set, each run of Chinese is re-read so
+   * that phrases fit their neighbors (帶傘 rather than 代傘).
+   */
+  bigramModel: BigramModel | undefined;
 
   /** Maps a punctuation key to its output in Chinese context. */
   punctuationLookup: (key: string) => string | undefined = (key) =>
@@ -723,10 +749,14 @@ export class MixedDecoder {
       st = b.prev;
     }
     tokens.reverse();
+    const finalTokens =
+      this.bigramModel && P.bigramWeight > 0
+        ? this.rescoreChinese_(tokens, options)
+        : tokens;
 
     // Punctuation follows the language around it.
     let lang: MixedLanguage | null = options.context ?? null;
-    for (const t of tokens) {
+    for (const t of finalTokens) {
       if (t.lang) {
         lang = t.lang;
       }
@@ -734,7 +764,180 @@ export class MixedDecoder {
         t.output = this.punctuationLookup(t.text) ?? t.text;
       }
     }
-    return { tokens, cost: total };
+    return { tokens: finalTokens, cost: total };
+  }
+
+  /** Re-reads every run of consecutive Chinese tokens with the bigram model. */
+  private rescoreChinese_(
+    tokens: MixedToken[],
+    options: DecodeOptions,
+  ): MixedToken[] {
+    const out: MixedToken[] = [];
+    let i = 0;
+    while (i < tokens.length) {
+      if (tokens[i].type !== MixedTokenType.Chinese) {
+        out.push(tokens[i]);
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j < tokens.length && tokens[j].type === MixedTokenType.Chinese) {
+        j++;
+      }
+      // A run at the very start, or after punctuation, starts a sentence.
+      // After English or digits the previous word is unknown.
+      let left: string | null = null;
+      if (i === 0) {
+        left = options.context === "zh" ? null : kSentenceStart;
+      } else if (tokens[i - 1].type === MixedTokenType.Punctuation) {
+        left = kSentenceStart;
+      }
+      for (const t of this.rescoreRun_(tokens.slice(i, j), left)) {
+        out.push(t);
+      }
+      i = j;
+    }
+    return out;
+  }
+
+  /**
+   * Viterbi over a phrase lattice for one Chinese run: unigram scores plus
+   * weighted word-pair bonuses. Phrases the user picked stay as they are.
+   */
+  private rescoreRun_(run: MixedToken[], left: string | null): MixedToken[] {
+    const P = this.params;
+    const bigram = this.bigramModel!;
+    const readings: string[] = [];
+    const starts: number[] = [];
+    const pinnedAt = new Map<number, MixedToken>();
+    for (const t of run) {
+      if (t.isOverride) {
+        pinnedAt.set(readings.length, t);
+      }
+      t.syllables!.forEach((r, k) => {
+        readings.push(r);
+        starts.push(t.syllableStarts![k]);
+      });
+    }
+    const n = readings.length;
+    const runEnd = run[run.length - 1].end;
+    const rawAt = (index: number): number =>
+      index < n ? starts[index] : runEnd;
+    const covered: boolean[] = new Array(n).fill(false);
+    for (const [at, t] of pinnedAt) {
+      for (let k = 0; k < t.syllables!.length; k++) {
+        covered[at + k] = true;
+      }
+    }
+
+    const nodesFrom = (s: number): LatticeNode[] => {
+      const pinned = pinnedAt.get(s);
+      if (pinned) {
+        return [
+          {
+            start: s,
+            end: s + pinned.syllables!.length,
+            value: pinned.output,
+            score: 0,
+            pinned,
+          },
+        ];
+      }
+      if (covered[s]) {
+        return [];
+      }
+      const nodes: LatticeNode[] = [];
+      for (let k = 1; k <= P.maxPhraseSyllables && s + k <= n; k++) {
+        if (covered[s + k - 1]) {
+          break;
+        }
+        const reading = readings.slice(s, s + k).join("-");
+        const unigrams = this.unigrams_(reading).slice(
+          0,
+          P.bigramPhrasesPerReading,
+        );
+        for (const u of unigrams) {
+          nodes.push({
+            start: s,
+            end: s + k,
+            value: u.value,
+            score: u.score - P.zhTokenPenalty,
+          });
+        }
+      }
+      return nodes;
+    };
+
+    const ending: Hypothesis[][] = [];
+    for (let k = 0; k <= n; k++) {
+      ending.push([]);
+    }
+    for (const node of nodesFrom(0)) {
+      const bonus = left === null ? 0 : bigram.bonus(left, node.value);
+      ending[node.end].push({
+        node,
+        score: node.score + P.bigramWeight * bonus,
+        prev: null,
+      });
+    }
+    for (let s = 1; s < n; s++) {
+      if (ending[s].length === 0) {
+        continue;
+      }
+      ending[s].sort((a, b) => b.score - a.score);
+      const kept = ending[s].slice(0, P.bigramBeam);
+      ending[s] = kept;
+      for (const node of nodesFrom(s)) {
+        let best: Hypothesis = kept[0];
+        let bestScore = Number.NEGATIVE_INFINITY;
+        for (const h of kept) {
+          const score =
+            h.score + P.bigramWeight * bigram.bonus(h.node.value, node.value);
+          if (score > bestScore) {
+            bestScore = score;
+            best = h;
+          }
+        }
+        ending[node.end].push({
+          node,
+          score: bestScore + node.score,
+          prev: best,
+        });
+      }
+    }
+    if (ending[n].length === 0) {
+      return run;
+    }
+    let h: Hypothesis | null = ending[n].reduce((a, b) =>
+      b.score > a.score ? b : a,
+    );
+    const result: MixedToken[] = [];
+    while (h) {
+      const node = h.node;
+      if (node.pinned) {
+        result.push({ ...node.pinned });
+      } else {
+        const syllables = readings.slice(node.start, node.end);
+        const syllableStarts: number[] = [];
+        for (let k = node.start; k <= node.end; k++) {
+          syllableStarts.push(rawAt(k));
+        }
+        result.push({
+          start: rawAt(node.start),
+          end: rawAt(node.end),
+          lang: "zh",
+          type: MixedTokenType.Chinese,
+          text: node.value,
+          output: node.value,
+          cost: -node.score,
+          reading: syllables.join("-"),
+          syllables,
+          syllableStarts,
+        });
+      }
+      h = h.prev;
+    }
+    return result.reverse();
   }
 
   /**

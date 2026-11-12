@@ -18,6 +18,7 @@ import { KeyHandler } from "../McBopomofo/KeyHandler";
 import { LocalizedStrings } from "../McBopomofo/LocalizedStrings";
 import { webData } from "../McBopomofo/WebData";
 import { WebLanguageModel } from "../McBopomofo/WebLanguageModel";
+import { BigramModel } from "./BigramModel";
 
 function keyFor(ch: string): Key {
   if (ch === " ") {
@@ -158,5 +159,15 @@ describe("KeyHandler in mixed mode", () => {
     const s = new Session(h);
     s.type("su3cl3");
     expect(s.composing).toBe("你好");
+  });
+});
+
+describe("KeyHandler mixed mode and the bigram model", () => {
+  test("a host can attach a bigram model to the mixed decoder", () => {
+    const h = mixedHandler();
+    h.mixedComposer.decoder.bigramModel = new BigramModel("帶\t傘 200\n");
+    const s = new Session(h);
+    s.type("ru42k7294n03");
+    expect(s.composing).toBe("記得帶傘");
   });
 });

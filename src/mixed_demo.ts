@@ -14,8 +14,10 @@ export {
 export { webData } from "./McBopomofo/WebData";
 export { WebLanguageModel } from "./McBopomofo/WebLanguageModel";
 export {
-  EnglishModel,
+  bigramData,
+  BigramModel,
   englishData,
+  EnglishModel,
   keysForReading,
   MixedCandidateKind,
   MixedComposer,

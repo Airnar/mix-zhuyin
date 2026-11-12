@@ -21,6 +21,8 @@ import {
   BopomofoSyllable,
 } from "../Mandarin";
 import {
+  bigramData,
+  BigramModel,
   englishData,
   EnglishModel,
   MixedCandidate,
@@ -141,6 +143,15 @@ function getSharedEnglishModel(): EnglishModel {
   return sharedEnglishModel;
 }
 
+let sharedBigramModel: BigramModel | null | undefined;
+/** The bundled word-pair model, or undefined if none has been trained. */
+function getSharedBigramModel(): BigramModel | undefined {
+  if (sharedBigramModel === undefined) {
+    sharedBigramModel = bigramData ? new BigramModel(bigramData) : null;
+  }
+  return sharedBigramModel ?? undefined;
+}
+
 export class KeyHandler {
   private variantAnnotator_ = new VariantAnnotator(
     webBpmfvsPua,
@@ -232,6 +243,7 @@ export class KeyHandler {
         getSharedEnglishModel(),
         this.keyboardLayout
       );
+      decoder.bigramModel = getSharedBigramModel();
       decoder.punctuationLookup = (k: string) => {
         const prefix = this.halfWidthPunctuation_
           ? kHalfPunctuationPrefix
