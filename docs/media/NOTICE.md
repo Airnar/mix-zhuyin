@@ -23,10 +23,17 @@ The file is filtered with the word list from an-array-of-english-words
 ## Word-pair (bigram) model
 
 `src/MixedInput/BigramData.ts` and `src/MixedInput/testdata/heldout.txt`, once
-trained, are derived from Chinese Wikipedia (via the wikimedia/wikipedia
-dataset), converted to Taiwan Traditional Chinese with OpenCC. Wikipedia text
-is licensed under the Creative Commons Attribution-ShareAlike 4.0 license, and
-so are these derived files.
+trained, are derived from:
+
+- Chinese Wikipedia (via the wikimedia/wikipedia dataset), licensed under the
+  Creative Commons Attribution-ShareAlike 4.0 license;
+- Traditional Chinese C4 (https://huggingface.co/datasets/yentinglin/zh_TW_c4)
+  by Yen-Ting Lin, licensed under the Open Data Commons Attribution License
+  (ODC-By), itself filtered from Common Crawl.
+
+Text is converted to Taiwan Traditional Chinese with OpenCC. Because of the
+Wikipedia share-alike terms, these derived files are licensed under CC BY-SA
+4.0. The file header states which sources a given build used.
 
 ## Mixed input code
 
