@@ -7,9 +7,12 @@ name: Train language model
 on:
   workflow_dispatch:
     inputs:
-      max_chars:
-        description: "Corpus size in characters"
-        default: "150000000"
+      sources:
+        description: "Space-separated NAME:CONFIG:CHARS Hugging Face sources"
+        default: "wikimedia/wikipedia:20231101.zh:150000000 yentinglin/zh_TW_c4::300000000"
+      source_note:
+        description: "Attribution for the generated file header"
+        default: "Chinese Wikipedia (CC BY-SA 4.0) and zh_TW_c4 (ODC-BY)"
       max_pairs:
         description: "Word pairs to keep"
         default: "300000"
@@ -34,14 +37,12 @@ jobs:
       - name: Train
         run: >
           python tools/mixed/train_bigram.py
-          --hf-dataset wikimedia/wikipedia
-          --hf-config 20231101.zh
-          --max-chars "${{ inputs.max_chars }}"
+          $(for x in ${{ inputs.sources }}; do printf -- "--hf %s " "$x"; done)
           --max-pairs "${{ inputs.max_pairs }}"
           --heldout heldout.txt
           --heldout-count 2000
           --output src/MixedInput/BigramData.ts
-          --source "Chinese Wikipedia (wikimedia/wikipedia, 20231101.zh)"
+          --source "${{ inputs.source_note }}"
 
       - uses: actions/setup-node@v6
         with:
@@ -73,7 +74,7 @@ jobs:
           git add src/MixedInput/BigramData.ts src/MixedInput/testdata/heldout.txt tools/mixed/reports
           git commit -q \
             -m "feat: train bigram model (run ${{ github.run_number }})" \
-            -m "Word pairs from Chinese Wikipedia, ${{ inputs.max_chars }} characters, up to ${{ inputs.max_pairs }} pairs." \
+            -m "Sources: ${{ inputs.sources }}; up to ${{ inputs.max_pairs }} pairs." \
             -m "Evaluation outcome: ${{ steps.evaluate.outcome }}; see tools/mixed/reports."
           git push origin "$branch"
 

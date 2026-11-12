@@ -9,10 +9,11 @@ often than chance gets a bonus:
 
 which the decoder adds to McBopomofo's unigram scores.
 
-Corpus sources:
-    --hf-dataset NAME --hf-config CONFIG   stream a Hugging Face dataset
-                                           (e.g. wikimedia/wikipedia 20231101.zh)
-    --text-file PATH (repeatable)          plain UTF-8 text files
+Corpus sources (repeatable, mixed in order):
+    --hf NAME:CONFIG:CHARS   stream CHARS characters of a Hugging Face dataset
+                             (CONFIG may be empty), e.g.
+                             wikimedia/wikipedia:20231101.zh:150000000
+    --text-file PATH         plain UTF-8 text files
 
 Text is converted to Taiwan Traditional Chinese with OpenCC (s2twp) first.
 
@@ -138,22 +139,24 @@ def count_chunk(texts):
     return unigrams, bigrams, sentences, chars
 
 
-def iter_documents(args):
-    if args.text_file:
-        for path in args.text_file:
+def iter_sources(args):
+    """Yields (source name, document iterator, character budget)."""
+    for path in args.text_file or []:
+
+        def lines(path=path):
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
                         yield line
-    if args.hf_dataset:
+
+        yield path, lines(), args.max_chars
+    for spec in args.hf or []:
+        name, config, chars = spec.rsplit(":", 2)
         from datasets import load_dataset
 
-        ds = load_dataset(
-            args.hf_dataset, args.hf_config, split="train", streaming=True
-        )
-        for row in ds:
-            yield row["text"]
+        ds = load_dataset(name, config or None, split="train", streaming=True)
+        yield name, (row["text"] for row in ds), int(chars)
 
 
 def heldout_sentences(text, converter, limit):
@@ -172,10 +175,11 @@ def heldout_sentences(text, converter, limit):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--webdata", default="src/McBopomofo/WebData.ts")
-    ap.add_argument("--hf-dataset")
-    ap.add_argument("--hf-config")
+    ap.add_argument("--hf", action="append",
+                    help="NAME:CONFIG:CHARS of a Hugging Face dataset")
     ap.add_argument("--text-file", action="append")
-    ap.add_argument("--max-chars", type=int, default=150_000_000)
+    ap.add_argument("--max-chars", type=int, default=150_000_000,
+                    help="Budget for each --text-file")
     ap.add_argument("--output", default="src/MixedInput/BigramData.ts")
     ap.add_argument("--heldout", help="Write held-out sentences here")
     ap.add_argument("--heldout-count", type=int, default=2000)
@@ -188,7 +192,7 @@ def main():
     ap.add_argument("--discount", type=float, default=0.5)
     ap.add_argument("--chunk-docs", type=int, default=200)
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 2)
-    ap.add_argument("--source", default="Wikipedia (zh)")
+    ap.add_argument("--source", default="Chinese Wikipedia")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -204,20 +208,32 @@ def main():
     sentences = 0
     chars = 0
 
+    n_sources = len(args.text_file or []) + len(args.hf or [])
+    per_source_heldout = max(1, args.heldout_count // max(1, n_sources))
+
     def chunks():
         nonlocal heldout
         batch = []
-        for idx, doc in enumerate(iter_documents(args)):
-            if args.heldout and idx % args.heldout_every == 0:
-                if len(heldout) < args.heldout_count:
-                    heldout += heldout_sentences(
-                        doc, converter, args.heldout_count - len(heldout)
-                    )
-                continue
-            batch.append(doc)
-            if len(batch) >= args.chunk_docs:
-                yield batch
-                batch = []
+        for name, docs, budget in iter_sources(args):
+            used = 0
+            taken = []
+            for idx, doc in enumerate(docs):
+                if args.heldout and idx % args.heldout_every == 0:
+                    if len(taken) < per_source_heldout:
+                        taken += heldout_sentences(
+                            doc, converter, per_source_heldout - len(taken)
+                        )
+                    continue
+                batch.append(doc)
+                used += len(doc)
+                if len(batch) >= args.chunk_docs:
+                    yield batch
+                    batch = []
+                if used >= budget:
+                    break
+            heldout += taken
+            print(f"source {name}: {used / 1e6:.1f}M raw characters, "
+                  f"{len(taken)} held-out sentences", flush=True)
         if batch:
             yield batch
 
@@ -236,9 +252,6 @@ def main():
             if len(bigrams) > 8_000_000:
                 # Keep memory bounded: drop pairs seen only once so far.
                 bigrams = Counter({k: v for k, v in bigrams.items() if v > 1})
-            if chars >= args.max_chars:
-                pool.terminate()
-                break
 
     total = sum(unigrams.values())
     print(f"done counting: {chars} chars, {sentences} sentences, {total} words",
