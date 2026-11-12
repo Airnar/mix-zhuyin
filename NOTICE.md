@@ -27,9 +27,10 @@ trained, are derived from:
 
 - Chinese Wikipedia (via the wikimedia/wikipedia dataset), licensed under the
   Creative Commons Attribution-ShareAlike 4.0 license;
-- Traditional Chinese C4 (https://huggingface.co/datasets/yentinglin/zh_TW_c4)
-  by Yen-Ting Lin, licensed under the Open Data Commons Attribution License
-  (ODC-By), itself filtered from Common Crawl.
+- Traditional Chinese C4 by Yen-Ting Lin (originally yentinglin/zh_TW_c4;
+  read from the mirror https://huggingface.co/datasets/botp/yentinglin-zh_TW_c4),
+  licensed under the Open Data Commons Attribution License (ODC-By), itself
+  filtered from Common Crawl.
 
 Text is converted to Taiwan Traditional Chinese with OpenCC. Because of the
 Wikipedia share-alike terms, these derived files are licensed under CC BY-SA

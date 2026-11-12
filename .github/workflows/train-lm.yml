@@ -9,7 +9,7 @@ on:
     inputs:
       sources:
         description: "Space-separated NAME:CONFIG:CHARS Hugging Face sources"
-        default: "wikimedia/wikipedia:20231101.zh:150000000 yentinglin/zh_TW_c4::300000000"
+        default: "wikimedia/wikipedia:20231101.zh:150000000 botp/yentinglin-zh_TW_c4::300000000"
       source_note:
         description: "Attribution for the generated file header"
         default: "Chinese Wikipedia (CC BY-SA 4.0) and zh_TW_c4 (ODC-BY)"
