@@ -425,6 +425,7 @@ export class InputController {
   public setUserPhrases(input: Map<string, string[]> | string): void {
     // If the input is a string or a map, we send it to the language model.
     this.lm_.setUserPhrases(input);
+    this.keyHandler_.mixedDictionaryChanged();
   }
 
   /**
@@ -434,6 +435,7 @@ export class InputController {
   public setExcludedPhrases(input: Map<string, string[]> | string): void {
     // If the input is a string or a map, we send it to the language model.
     this.lm_.setExcludedPhrases(input);
+    this.keyHandler_.mixedDictionaryChanged();
   }
 
   /**
@@ -472,6 +474,7 @@ export class InputController {
           }
         : undefined
     );
+    this.keyHandler_.mixedDictionaryChanged();
   }
 
   public setPreferLongerPhrases(flag: boolean): void {
@@ -488,6 +491,7 @@ export class InputController {
           }
         : undefined
     );
+    this.keyHandler_.mixedDictionaryChanged();
   }
 
   /**
@@ -560,6 +564,59 @@ export class InputController {
    */
   public setAllowChangingPriorTone(flag: boolean) {
     this.keyHandler_.allowChangingPriorTone = flag;
+  }
+
+  /**
+   * Turns mixed Chinese/English input on or off. In mixed mode, the same keys
+   * are read as Bopomofo and as English letters, and the more likely reading
+   * is used, so users do not switch modes.
+   */
+  public setMixedMode(flag: boolean): void {
+    this.enterNewState(new Empty());
+    this.keyHandler_.mixedMode = flag;
+  }
+
+  /** Whether mixed mode is on. */
+  public get mixedMode(): boolean {
+    return this.keyHandler_.mixedMode;
+  }
+
+  /** Whether to put a space between Chinese and English in mixed mode. */
+  public setMixedAutoSpace(flag: boolean): void {
+    this.keyHandler_.mixedAutoSpace = flag;
+  }
+
+  /**
+   * Call on a single Shift tap. In mixed mode, while composing, it switches
+   * the segment under the cursor between Chinese and English.
+   * @returns False if not handled; the host may toggle its alphabet mode.
+   */
+  public mixedShiftTap(): boolean {
+    if (this.state_ instanceof ChoosingCandidate) {
+      return false;
+    }
+    const handled = this.keyHandler_.mixedShiftTapped(
+      (newState) => this.enterNewState(newState),
+      () => this.onError_?.()
+    );
+    if (handled) {
+      if (this.state_ instanceof NotEmpty) {
+        this.updatePreedit(this.state_);
+      } else {
+        this.ui_.update();
+      }
+    }
+    return handled;
+  }
+
+  /** What mixed mode has learned, as JSON, to save between sessions. */
+  public exportMixedLearning(): string {
+    return this.keyHandler_.mixedComposer.exportLearning();
+  }
+
+  /** Restores what {@link exportMixedLearning} returned. */
+  public importMixedLearning(json: string): void {
+    this.keyHandler_.mixedComposer.importLearning(json);
   }
 
   /**
@@ -1115,6 +1172,9 @@ export class InputController {
 
   private handleInputting(prev: InputState, state: Inputting) {
     this.ui_.reset();
+    if (state.evictedText) {
+      this.ui_.commitString(state.evictedText);
+    }
     this.updatePreedit(state);
   }
 

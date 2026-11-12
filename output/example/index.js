@@ -524,8 +524,25 @@ if (typeof document !== "undefined") {
           ui.beep();
         }
       });
+      // Mixed Chinese/English input is the default in MixZhuyin.
+      controller.setMixedMode(true);
+      try {
+        const learned = localStorage.getItem("mixzhuyin.learning");
+        if (learned) {
+          controller.importMixedLearning(learned);
+        }
+      } catch (e) {}
       return controller;
     })();
+
+    function saveMixedLearning() {
+      try {
+        localStorage.setItem(
+          "mixzhuyin.learning",
+          controller.exportMixedLearning()
+        );
+      } catch (e) {}
+    }
 
     const service = (() => {
       let that = {};
@@ -1264,6 +1281,11 @@ if (typeof document !== "undefined") {
         }
 
         if (event.key === "Shift" && shiftKeyIsPressed) {
+          // In mixed mode, a Shift tap while composing flips the segment
+          // under the cursor between Chinese and English.
+          if (controller.mixedShiftTap()) {
+            return;
+          }
           globalUi.alphabetMode = !globalUi.alphabetMode;
           controller.reset();
           return;
@@ -1301,7 +1323,20 @@ if (typeof document !== "undefined") {
         if (accepted) {
           event.preventDefault();
         }
+        if (event.key === "Enter" && controller.mixedMode) {
+          saveMixedLearning();
+        }
       });
+
+      $("mixed_mode").onchange = () => {
+        controller.setMixedMode($("mixed_mode").checked);
+        focusElement("text_area");
+      };
+
+      $("mixed_auto_space").onchange = () => {
+        controller.setMixedAutoSpace($("mixed_auto_space").checked);
+        focusElement("text_area");
+      };
 
       $("use_mcbopomofo").onchange = (event) => {
         controller.setTraditionalMode(false);

@@ -20,6 +20,13 @@ import {
   BopomofoReadingBuffer,
   BopomofoSyllable,
 } from "../Mandarin";
+import {
+  englishData,
+  EnglishModel,
+  MixedCandidate,
+  MixedComposer,
+  MixedDecoder,
+} from "../MixedInput";
 import { CtrlEnterOption } from "./CtrlEnterOption";
 import { DictionaryServices } from "./DictionaryServices";
 import { NumberInputHelper } from "./InputHelperNumber";
@@ -75,7 +82,9 @@ const kObservedOverrideHalfLife = 5400.0; // 1.5 hr.
 const kNoOverrideThreshold: number = -8.0;
 const kJoinSeparator = "-";
 
-function GetKeyboardLayoutName(layout: BopomofoKeyboardLayout): string {
+export function GetKeyboardLayoutName(
+  layout: BopomofoKeyboardLayout
+): string {
   if (layout === BopomofoKeyboardLayout.ETenLayout) {
     return "ETen";
   } else if (layout === BopomofoKeyboardLayout.HsuLayout) {
@@ -115,8 +124,21 @@ export class KeyHandlerSettings {
       | undefined = undefined,
     public readonly ctrlEnterOption: CtrlEnterOption = CtrlEnterOption.None,
     public readonly bopomofoFontAnnotationSupportEnabled: boolean = false,
-    public readonly allowChangingPriorTone: boolean = false
+    public readonly allowChangingPriorTone: boolean = false,
+    public readonly mixedMode: boolean = false,
+    public readonly mixedAutoSpace: boolean = true
   ) {}
+}
+
+/** Prefix of the readings of candidates in mixed mode. */
+const kMixedCandidatePrefix = "_mix_";
+
+let sharedEnglishModel: EnglishModel | undefined;
+function getSharedEnglishModel(): EnglishModel {
+  if (!sharedEnglishModel) {
+    sharedEnglishModel = new EnglishModel(englishData);
+  }
+  return sharedEnglishModel;
 }
 
 export class KeyHandler {
@@ -146,7 +168,9 @@ export class KeyHandler {
       this.onOpenUrl,
       this.ctrlEnterOption_,
       this.bopomofoFontAnnotationSupportEnabled,
-      this.allowChangingPriorTone
+      this.allowChangingPriorTone,
+      this.mixedMode,
+      this.mixedAutoSpace
     );
   }
 
@@ -169,6 +193,227 @@ export class KeyHandler {
     this.bopomofoFontAnnotationSupportEnabled =
       settings.bopomofoFontAnnotationSupportEnabled;
     this.allowChangingPriorTone = settings.allowChangingPriorTone;
+    this.mixedMode = settings.mixedMode;
+    this.mixedAutoSpace = settings.mixedAutoSpace;
+  }
+
+  private mixedMode_: boolean = false;
+  /**
+   * Mixed Chinese/English input: letters and Bopomofo keys are read both ways
+   * and the more likely reading wins, so users never switch modes.
+   */
+  public get mixedMode(): boolean {
+    return this.mixedMode_;
+  }
+  public set mixedMode(flag: boolean) {
+    if (flag !== this.mixedMode_) {
+      this.reset();
+    }
+    this.mixedMode_ = flag;
+  }
+
+  private mixedAutoSpace_: boolean = true;
+  /** Insert a space between Chinese and English in mixed mode. */
+  public get mixedAutoSpace(): boolean {
+    return this.mixedAutoSpace_;
+  }
+  public set mixedAutoSpace(flag: boolean) {
+    this.mixedAutoSpace_ = flag;
+  }
+
+  private mixedComposer_: MixedComposer | undefined;
+  private mixedCandidates_: MixedCandidate[] = [];
+
+  /** The mixed-mode composer, created on first use. */
+  public get mixedComposer(): MixedComposer {
+    if (!this.mixedComposer_) {
+      const decoder = new MixedDecoder(
+        this.languageModel_,
+        getSharedEnglishModel(),
+        this.keyboardLayout
+      );
+      decoder.punctuationLookup = (k: string) => {
+        const prefix = this.halfWidthPunctuation_
+          ? kHalfPunctuationPrefix
+          : kPunctuationKeyPrefix;
+        for (const key of [
+          prefix + GetKeyboardLayoutName(this.keyboardLayout) + "_" + k,
+          prefix + k,
+        ]) {
+          const u = this.languageModel_.getUnigrams(key);
+          if (u.length > 0) {
+            return u[0].value;
+          }
+        }
+        return undefined;
+      };
+      this.mixedComposer_ = new MixedComposer(decoder);
+    }
+    this.mixedComposer_.decoder.layout = this.keyboardLayout;
+    this.mixedComposer_.autoSpace = this.mixedAutoSpace_;
+    return this.mixedComposer_;
+  }
+
+  /** Call when the dictionary or user phrases change. */
+  public mixedDictionaryChanged(): void {
+    this.mixedComposer_?.decoder.clearCache();
+  }
+
+  private mixedState_(evicted: string = ""): InputState {
+    const c = this.mixedComposer;
+    if (c.isEmpty) {
+      return evicted ? new Committing(evicted) : new EmptyIgnoringPrevious();
+    }
+    const view = c.view();
+    const tip = view.prediction ? "Tab → " + view.prediction : "";
+    return new Inputting(view.text, view.cursorIndex, tip, evicted);
+  }
+
+  /**
+   * Single Shift tap in mixed mode: switches the segment under the cursor
+   * between Chinese and English. Returns false when nothing is being
+   * composed, so the host can toggle its alphabet mode instead.
+   */
+  public mixedShiftTapped(
+    stateCallback: (state: InputState) => void,
+    errorCallback: () => void
+  ): boolean {
+    if (!this.mixedMode_ || this.mixedComposer.isEmpty) {
+      return false;
+    }
+    if (!this.mixedComposer.flip()) {
+      errorCallback();
+    }
+    stateCallback(this.mixedState_());
+    return true;
+  }
+
+  private handleMixed_(
+    key: Key,
+    state: InputState,
+    stateCallback: (state: InputState) => void,
+    errorCallback: () => void
+  ): boolean {
+    const c = this.mixedComposer;
+    const emit = (): void => {
+      stateCallback(this.mixedState_(c.commitOverflow()));
+    };
+
+    if (key.ctrlPressed) {
+      // Leave shortcuts to the application unless we are composing.
+      return !c.isEmpty;
+    }
+
+    if (key.isNumpadKey) {
+      if (c.isEmpty || key.ascii.length !== 1) {
+        return false;
+      }
+      c.insert(key.ascii, true);
+      emit();
+      return true;
+    }
+
+    switch (key.name) {
+      case KeyName.RETURN: {
+        if (c.isEmpty) {
+          return false;
+        }
+        stateCallback(new Committing(c.commit()));
+        return true;
+      }
+      case KeyName.SPACE:
+        if (c.isEmpty) {
+          if (key.shiftPressed) {
+            return false;
+          }
+          // Keep the space so auto spacing knows what came before.
+          c.precedingCharacter += " ";
+          return false;
+        }
+        c.insert(" ");
+        emit();
+        return true;
+      case KeyName.BACKSPACE:
+      case KeyName.DELETE:
+        if (c.isEmpty) {
+          c.precedingCharacter = "";
+          return false;
+        }
+        c.backspace();
+        stateCallback(this.mixedState_());
+        return true;
+      case KeyName.ESC:
+        if (c.isEmpty) {
+          return false;
+        }
+        c.clear();
+        stateCallback(new EmptyIgnoringPrevious());
+        return true;
+      case KeyName.LEFT:
+      case KeyName.RIGHT:
+        if (c.isEmpty) {
+          c.precedingCharacter = "";
+          return false;
+        }
+        if (!c.moveFocus(key.name === KeyName.LEFT ? -1 : 1)) {
+          errorCallback();
+        }
+        stateCallback(this.mixedState_());
+        return true;
+      case KeyName.HOME:
+      case KeyName.END:
+      case KeyName.UP:
+      case KeyName.PAGE_UP:
+      case KeyName.PAGE_DOWN:
+        if (c.isEmpty) {
+          return false;
+        }
+        stateCallback(this.mixedState_());
+        return true;
+      case KeyName.DOWN: {
+        if (c.isEmpty) {
+          return false;
+        }
+        const list = c.candidates();
+        if (list.length === 0) {
+          errorCallback();
+          stateCallback(this.mixedState_());
+          return true;
+        }
+        this.mixedCandidates_ = list;
+        const view = c.view();
+        const candidates = list.map(
+          (m, i) => new Candidate(kMixedCandidatePrefix + i, m.label, m.label)
+        );
+        stateCallback(
+          new ChoosingCandidate(
+            view.text,
+            view.cursorIndex,
+            candidates,
+            view.cursorIndex
+          )
+        );
+        return true;
+      }
+      case KeyName.TAB:
+        if (c.isEmpty) {
+          return false;
+        }
+        if (!c.acceptPrediction()) {
+          errorCallback();
+        }
+        emit();
+        return true;
+      default:
+        break;
+    }
+
+    if (key.ascii.length === 1 && key.ascii >= " " && key.ascii <= "~") {
+      c.insert(key.ascii);
+      emit();
+      return true;
+    }
+    return !c.isEmpty;
   }
 
   private selectPhraseAfterCursorAsCandidate_: boolean = false;
@@ -382,6 +627,13 @@ export class KeyHandler {
 
     if (state instanceof Iroha) {
       return this.handleIrohaInput(key, state, stateCallback, errorCallback);
+    }
+
+    if (
+      this.mixedMode_ &&
+      this.keyboardLayout !== BopomofoKeyboardLayout.HanyuPinyinLayout
+    ) {
+      return this.handleMixed_(key, state, stateCallback, errorCallback);
     }
 
     // Numpad
@@ -894,6 +1146,19 @@ export class KeyHandler {
     originalCursorIndex: number,
     stateCallback: (state: InputState) => void
   ): void {
+    if (this.mixedMode_ && candidate.reading.startsWith(kMixedCandidatePrefix)) {
+      const index = parseInt(
+        candidate.reading.substring(kMixedCandidatePrefix.length),
+        10
+      );
+      const picked = this.mixedCandidates_[index];
+      if (picked) {
+        this.mixedComposer.selectCandidate(picked);
+      }
+      this.mixedCandidates_ = [];
+      stateCallback(this.mixedState_());
+      return;
+    }
     if (this.traditionalMode_) {
       this.reset();
       stateCallback(new Committing(candidate.value));
@@ -967,6 +1232,11 @@ export class KeyHandler {
     originalCursorIndex: number,
     stateCallback: (state: InputState) => void
   ): void {
+    if (this.mixedMode_ && !this.mixedComposer.isEmpty) {
+      this.mixedCandidates_ = [];
+      stateCallback(this.mixedState_());
+      return;
+    }
     if (this.traditionalMode_) {
       this.reset();
       stateCallback(new EmptyIgnoringPrevious());
@@ -1016,6 +1286,11 @@ export class KeyHandler {
     this.reading_.clear();
     this.grid_.clear();
     this.latestWalk_ = undefined;
+    if (this.mixedComposer_) {
+      this.mixedComposer_.clear();
+      this.mixedComposer_.precedingCharacter = "";
+      this.mixedCandidates_ = [];
+    }
   }
 
   public get gridLength(): number {

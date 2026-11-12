@@ -90,7 +90,16 @@ export class NotEmpty implements InputState {
  */
 /* istanbul ignore next */
 export class Inputting extends NotEmpty {
-  constructor(buf: string, index: number, tooltipText: string = "") {
+  constructor(
+    buf: string,
+    index: number,
+    tooltipText: string = "",
+    /**
+     * Text that left the composing buffer and should be committed before the
+     * buffer is shown, e.g. when a long composition commits its beginning.
+     */
+    readonly evictedText: string = ""
+  ) {
     super(buf, index, tooltipText);
   }
 

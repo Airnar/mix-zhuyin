@@ -76,6 +76,10 @@ interface Settings {
   repeated_punctuation_choose_candidate: boolean;
   /** Whether BPMF font annotation support is enabled. */
   bopomofo_font_annotation_support_enabled: boolean;
+  /** Whether mixed Chinese/English input (automatic detection) is on. */
+  mixed_mode: boolean;
+  /** Whether to put a space between Chinese and English in mixed mode. */
+  mixed_auto_space: boolean;
 }
 
 /**
@@ -121,6 +125,8 @@ const defaultSettings: Settings = {
   moving_cursor_option: MovingCursorOption.Disabled,
   repeated_punctuation_choose_candidate: false,
   bopomofo_font_annotation_support_enabled: false,
+  mixed_mode: true,
+  mixed_auto_space: true,
 };
 
 /**
@@ -179,6 +185,11 @@ class PimeMcBopomofo {
    */
   isShiftHold: boolean = false;
   /**
+   * The single Shift tap started while composing in mixed mode, so it flips a
+   * segment instead of toggling the alphabet mode.
+   */
+  isMixedShiftHold: boolean = false;
+  /**
    * Helps to remember if Caps Lock is on when key down event is triggered. It
    * would be reset on key on.
    */
@@ -209,6 +220,7 @@ class PimeMcBopomofo {
     });
 
     this.loadUserPhrases();
+    this.loadMixedLearning();
   }
 
   /** Resets the UI state before handling a key. */
@@ -390,7 +402,50 @@ class PimeMcBopomofo {
     this.inputController.setBopomofoFontAnnotationSupportEnabled(
       this.settings.bopomofo_font_annotation_support_enabled,
     );
+    this.inputController.setMixedMode(this.settings.mixed_mode !== false);
+    this.inputController.setMixedAutoSpace(
+      this.settings.mixed_auto_space !== false,
+    );
     this.inputController.setLanguageCode("zh-TW");
+  }
+
+  /** The path to what mixed mode has learned. */
+  readonly mixedLearningPath: string = path.join(
+    this.mcBopomofoUserDataPath,
+    "mixed-learning.json",
+  );
+
+  private mixedLearningTimer_: ReturnType<typeof setTimeout> | undefined;
+
+  /** Loads what mixed mode has learned. */
+  public loadMixedLearning(): void {
+    fs.readFile(this.mixedLearningPath, (err, data) => {
+      if (err) {
+        return;
+      }
+      this.inputController.importMixedLearning(data.toString("utf8"));
+    });
+  }
+
+  /** Saves what mixed mode has learned, a moment after the last change. */
+  public scheduleSaveMixedLearning(): void {
+    if (this.mixedLearningTimer_) {
+      clearTimeout(this.mixedLearningTimer_);
+    }
+    this.mixedLearningTimer_ = setTimeout(() => {
+      if (!fs.existsSync(this.mcBopomofoUserDataPath)) {
+        fs.mkdirSync(this.mcBopomofoUserDataPath, { recursive: true });
+      }
+      fs.writeFile(
+        this.mixedLearningPath,
+        this.inputController.exportMixedLearning(),
+        (err) => {
+          if (err) {
+            console.error("Failed to save mixed learning: " + err);
+          }
+        },
+      );
+    }, 2000);
   }
 
   /**
@@ -910,6 +965,22 @@ module.exports = {
         hideMessage: true,
       };
 
+      if (pimeMcBopomofo.isShiftHold && pimeMcBopomofo.isMixedShiftHold) {
+        pimeMcBopomofo.isShiftHold = false;
+        pimeMcBopomofo.isMixedShiftHold = false;
+        pimeMcBopomofo.resetBeforeHandlingKey();
+        pimeMcBopomofo.inputController.mixedShiftTap();
+        const response = Object.assign(
+          {},
+          responseTemplate,
+          pimeMcBopomofo.uiState,
+          {
+            return: false,
+          },
+        );
+        return response;
+      }
+
       if (pimeMcBopomofo.isShiftHold) {
         pimeMcBopomofo.toggleAlphabetMode();
         // Note: Since we are toggling alphabet mode on key up event, we should
@@ -1014,6 +1085,13 @@ module.exports = {
       if (state instanceof Empty === false) {
         shouldHandleShift = false;
       }
+      // In mixed mode, a Shift tap while composing flips the segment under
+      // the cursor between Chinese and English.
+      const isMixedComposing =
+        pimeMcBopomofo.inputController.mixedMode && state instanceof Inputting;
+      if (isMixedComposing) {
+        shouldHandleShift = true;
+      }
 
       const isPressingShiftOnly = key.ascii === "Shift";
 
@@ -1027,12 +1105,14 @@ module.exports = {
       // we will toggle Alphabet/Chinese.
       if (shouldHandleShift && isPressingShiftOnly) {
         pimeMcBopomofo.isShiftHold = true;
+        pimeMcBopomofo.isMixedShiftHold = isMixedComposing;
         const response = Object.assign({}, responseTemplate, {
           return: false,
         });
         return response;
       } else {
         pimeMcBopomofo.isShiftHold = false;
+        pimeMcBopomofo.isMixedShiftHold = false;
       }
 
       pimeMcBopomofo.resetBeforeHandlingKey();
@@ -1057,6 +1137,12 @@ module.exports = {
 
       const handled = pimeMcBopomofo.inputController.mcbopomofoKeyEvent(key);
       pimeMcBopomofo.isLastFilterKeyDownHandled = handled;
+      if (
+        pimeMcBopomofo.inputController.mixedMode &&
+        pimeMcBopomofo.uiState.commitString
+      ) {
+        pimeMcBopomofo.scheduleSaveMixedLearning();
+      }
       const response = Object.assign({}, responseTemplate, {
         return: handled,
       });

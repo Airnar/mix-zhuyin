@@ -18,6 +18,8 @@ window.onload = () => {
     beep_on_error: true,
     repeated_punctuation_choose_candidate: false,
     allow_changing_prior_tone: false,
+    mixed_mode: true,
+    mixed_auto_space: true,
   };
 
   let settings = {};
@@ -95,6 +97,14 @@ window.onload = () => {
     }
     {
       $("move_cursor").checked = settings.move_cursor;
+    }
+    {
+      $("mixed_mode").checked =
+        settings.mixed_mode === undefined ? true : settings.mixed_mode;
+      $("mixed_auto_space").checked =
+        settings.mixed_auto_space === undefined
+          ? true
+          : settings.mixed_auto_space;
     }
 
     {
@@ -244,6 +254,16 @@ window.onload = () => {
   $("esc_key").onchange = (event) => {
     const checked = $("esc_key").checked;
     settings.esc_key_clear_entire_buffer = checked;
+    saveSettings(settings);
+  };
+
+  $("mixed_mode").onchange = (event) => {
+    settings.mixed_mode = $("mixed_mode").checked;
+    saveSettings(settings);
+  };
+
+  $("mixed_auto_space").onchange = (event) => {
+    settings.mixed_auto_space = $("mixed_auto_space").checked;
     saveSettings(settings);
   };
 
