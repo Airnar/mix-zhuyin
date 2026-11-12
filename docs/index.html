@@ -22,6 +22,53 @@
 <li><code>MixedComposer.ts</code>：組字狀態（游標、選字、Shift 中英互換、自動空白、學習）</li>
 <li><code>EnglishModel.ts</code>、<code>EnglishData.ts</code>：英文詞頻</li>
 </ul>
+<h2 id="整句選字（本機語言模型）" class="tsd-anchor-link">整句選字（本機語言模型）<a href="#整句選字（本機語言模型）" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>中文部分判斷完之後，會再用「詞與詞相鄰的機率」把整段重新選一次字，例如「記得帶傘」不會被選成「記得代傘」。模型是詞的二元語法（bigram），在本機計算、不連網，每句約 1–2 毫秒。</p>
+<ul>
+<li>訓練語料：中文維基百科 1.5 億字＋繁體中文網頁語料（Traditional Chinese C4）3 億字，用 OpenCC 轉成台灣正體用語，以小麥注音的詞庫斷詞。</li>
+<li>模型大小：30 萬組詞對，約 3 MB。</li>
+<li>訓練方式：GitHub Actions 的「Train language model」工作流程（<a href="media/train_bigram.py"><code>tools/mixed/train_bigram.py</code></a>），訓練完會自動評估並推到 <code>lm/bigram-&lt;編號&gt;</code> 分支。</li>
+</ul>
+<p>在 2,000 句沒參與訓練的句子上（純注音輸入、大千配置）的結果：</p>
+<table>
+<thead>
+<tr>
+<th>測試句</th>
+<th>只用詞頻（小麥注音原本）</th>
+<th>加上語言模型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>維基百科 1,000 句：字正確率</td>
+<td>91.8%</td>
+<td>93.8%</td>
+</tr>
+<tr>
+<td>維基百科 1,000 句：整句全對</td>
+<td>58.5%</td>
+<td>67.9%</td>
+</tr>
+<tr>
+<td>網頁文字 1,000 句：字正確率</td>
+<td>89.6%</td>
+<td>92.1%</td>
+</tr>
+<tr>
+<td>網頁文字 1,000 句：整句全對</td>
+<td>48.2%</td>
+<td>59.5%</td>
+</tr>
+<tr>
+<td>日常混打 146 句：整句全對</td>
+<td>141</td>
+<td>144</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>給譯者／詞庫維護者：<code>src/MixedInput/BigramData.ts</code> 是訓練產生的資料，請不要手改；要更新就重新跑訓練流程。它只影響混打模式的選字順序，不改變小麥注音詞庫本身。</p>
+</blockquote>
 <h2 id="操作" class="tsd-anchor-link">操作<a href="#操作" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <table>
 <thead>
@@ -100,7 +147,7 @@
 </code><button type="button">Copy</button></pre>
 
 <h2 id="授權" class="tsd-anchor-link">授權<a href="#授權" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>程式碼採 MIT 授權，與小麥注音相同。英文詞頻資料 <code>src/MixedInput/EnglishData.ts</code> 衍生自 wordfreq，採 CC BY-SA 4.0。詳見 <a href="media/NOTICE.md">NOTICE.md</a>。</p>
+<p>程式碼採 MIT 授權，與小麥注音相同。英文詞頻資料 <code>src/MixedInput/EnglishData.ts</code> 衍生自 wordfreq、語言模型資料 <code>src/MixedInput/BigramData.ts</code> 衍生自維基百科與 Traditional Chinese C4，這兩個資料檔採 CC BY-SA 4.0。詳見 <a href="media/NOTICE.md">NOTICE.md</a>。</p>
 <p>小麥注音原本的說明文件見 <a href="media/README.upstream.md">README.upstream.md</a>。</p>
 </div></div>
 <div class="col-sidebar">
@@ -120,6 +167,7 @@
 <div class="tsd-accordion-details"><a href="#混打注音-mixzhuyin"><span>混打注音 <wbr/>Mix<wbr/>Zhuyin</span></a>
 <ul>
 <li><a href="#怎麼判斷中文還是英文"><span>怎麼判斷中文還是英文</span></a></li>
+<li><a href="#整句選字（本機語言模型）"><span>整句選字（本機語言模型）</span></a></li>
 <li><a href="#操作"><span>操作</span></a></li>
 <li><a href="#判斷準確度"><span>判斷準確度</span></a></li>
 <li><a href="#開發"><span>開發</span></a></li>

@@ -46,6 +46,10 @@
  * @license
  * Word-pair bonuses for mixed Chinese/English input.
  *
- * Empty until trained: run the "Train language model" GitHub Actions
- * workflow, or tools/mixed/train_bigram.py locally.
+ * Derived from Chinese Wikipedia (CC BY-SA 4.0) and zh_TW_c4 (ODC-BY) with tools/mixed/train_bigram.py. Wikipedia text is
+ * licensed under CC BY-SA 4.0, and so is THIS FILE (the data); see NOTICE.md.
+ *
+ * 300000 pairs from 284.8M characters (37648313 sentences).
+ *
+ * Format: one line per previous word, "prev<TAB>next bonus*100 ...".
  */
