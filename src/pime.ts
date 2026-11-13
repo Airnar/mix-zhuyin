@@ -33,6 +33,8 @@ import {
   runPowerShell,
 } from "./pime_dialogs";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
+
+const ChineseConvert = require("chinese_convert");
 import {
   DoubleCtrlDetector,
   LookupDictionary,
@@ -191,11 +193,15 @@ class PimeMcBopomofo {
     },
     chat: async (settings, messages) => {
       const apiKey = settings.isLocal ? settings.apiKey : await this.cloudKey();
-      return askModel(
+      const answer = await askModel(
         { ...settings, apiKey },
         messages,
         fetch as unknown as FetchLike,
       );
+      // Small local models often answer in Simplified Chinese.
+      return this.settings.chineseConversion
+        ? answer
+        : ChineseConvert.cn2tw(answer);
     },
   });
   /** What onKeyDown answers for a key the AI took in filterKeyDown. */

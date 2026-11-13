@@ -12,9 +12,12 @@ import {
   FetchLike,
   kAnthropicVersion,
   kCloudProviders,
+  kCloudTimeoutMs,
   kDefaultAiBaseUrl,
+  kLocalTimeoutMs,
   parseSuggestions,
   rewritePrompt,
+  timeoutFor,
 } from "./pime_ai";
 
 const settings: AiSettings = {
@@ -349,5 +352,21 @@ describe("AiAssistant", () => {
     expect(message).toContain("雲端 AI");
     expect(message).toContain("HTTP 401");
     expect(message).not.toContain("Ollama");
+  });
+
+  test("waits longer for the local model than for the cloud", () => {
+    expect(timeoutFor(settings)).toBe(kLocalTimeoutMs);
+    expect(timeoutFor(claude)).toBe(kCloudTimeoutMs);
+    expect(kLocalTimeoutMs).toBeGreaterThan(kCloudTimeoutMs);
+
+    const { host } = makeHost({
+      composing: () => ({ raw: "a", text: "a", readings: "a" }),
+      chat: () => new Promise<string>(() => undefined),
+    });
+    const ai = new AiAssistant(host);
+    ai.keyDown(ctrl(0x0d), 0);
+    // A cold local model may take most of a minute.
+    expect(ai.refresh(kLocalTimeoutMs).fields.refreshAfter).toBeGreaterThan(0);
+    expect(JSON.stringify(ai.refresh(kLocalTimeoutMs + 6000).fields)).toContain("Ollama");
   });
 });

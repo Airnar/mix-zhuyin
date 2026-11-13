@@ -60,6 +60,22 @@ export const kCloudProviders: { [id: string]: CloudProvider } = {
   custom: { protocol: "openai", baseUrl: "", model: "" },
 };
 
+/**
+ * How long to wait for the local model: a cold Ollama model takes a while to
+ * load before it answers, more so without a GPU.
+ */
+export const kLocalTimeoutMs = 60000;
+/** How long to wait for a cloud service. */
+export const kCloudTimeoutMs = 30000;
+
+/**
+ * How long to wait for a model.
+ * @param settings Where the model is.
+ * @returns Milliseconds.
+ */
+export const timeoutFor = (settings: AiSettings): number =>
+  settings.isLocal ? kLocalTimeoutMs : kCloudTimeoutMs;
+
 /** The Anthropic API version the client speaks. */
 export const kAnthropicVersion = "2026-10-21";
 
@@ -218,7 +234,7 @@ export const askModel = (
   settings: AiSettings,
   messages: ChatMessage[],
   fetchImpl: FetchLike,
-  timeoutMs = 30000,
+  timeoutMs = timeoutFor(settings),
 ): Promise<string> =>
   settings.protocol === "anthropic"
     ? anthropicMessages(settings, messages, fetchImpl, timeoutMs)
@@ -329,6 +345,7 @@ export interface AiKey {
 interface Job {
   task: AiTask;
   isLocal: boolean;
+  timeoutMs: number;
   startedAt: number;
   input: string;
   done: boolean;
@@ -363,11 +380,12 @@ export class AiAssistant {
 
   /**
    * @param host The input method.
-   * @param timeoutMs How long to wait for an answer.
+   * @param timeoutMs How long to wait for an answer; by default a little
+   *   longer than the request itself may take (`timeoutFor`).
    */
   constructor(
     private readonly host: AiHost,
-    private readonly timeoutMs = 30000,
+    private readonly timeoutMs?: number,
   ) {}
 
   /**
@@ -423,7 +441,7 @@ export class AiAssistant {
         correctionPrompt(composing.text, composing.readings));
       return {
         fields: {
-          showMessage: { message: "AI 想想看…", duration: 30 },
+          showMessage: { message: "AI 想想看…", duration: 60 },
           refreshAfter: kPollMs,
         },
       };
@@ -444,7 +462,7 @@ export class AiAssistant {
         fields: {
           showLookup: {
             message: explain ? "AI 解釋中…" : "AI 改寫中…",
-            duration: 30,
+            duration: 60,
           },
           refreshAfter: kPollMs,
         },
@@ -463,7 +481,7 @@ export class AiAssistant {
       return { fields: {} };
     }
     if (!job.done) {
-      if (now - job.startedAt <= this.timeoutMs) {
+      if (now - job.startedAt <= job.timeoutMs) {
         return { fields: { refreshAfter: kPollMs } };
       }
       job.done = true;
@@ -524,6 +542,7 @@ export class AiAssistant {
     const job: Job = {
       task,
       isLocal: settings.isLocal,
+      timeoutMs: this.timeoutMs ?? timeoutFor(settings) + 5000,
       startedAt: now,
       input,
       done: false,
