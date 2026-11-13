@@ -62,7 +62,12 @@ const babelES5Options = {
 module.exports = {
   mode: "production",
   target: "node",
-  entry: "./src/pime.ts",
+  // index.js is the input method; config_tool.js serves the settings pages
+  // (it replaces PIME's Python config_tool.py).
+  entry: {
+    index: "./src/pime.ts",
+    config_tool: "./src/pime_config_tool_main.ts",
+  },
 
   module: {
     rules: [
@@ -107,7 +112,7 @@ module.exports = {
   },
 
   output: {
-    filename: "index.js",
+    filename: "[name].js",
     path: path.resolve(__dirname, "output/pime"),
     libraryTarget: "commonjs2",
     environment: {

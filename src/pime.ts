@@ -12,84 +12,15 @@ import { List } from "lodash";
 import path from "path";
 import process from "process";
 
-import {
-  InputController,
-  MovingCursorOption,
-} from "./McBopomofo/InputController";
+import { InputController } from "./McBopomofo/InputController";
 import { Empty, Inputting, NotEmpty } from "./McBopomofo/InputState";
 import { InputUI } from "./McBopomofo/InputUI";
+import { openWithShell } from "./pime_config_tool";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
-import { candidateUi, kDefaultCandidateFont } from "./pime_ui";
+import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
+import { defaultSettings, Settings } from "./pime_settings";
+import { candidateUi } from "./pime_ui";
 
-/**
- * The McBopomofo Settings.
- * @interface
- */
-interface Settings {
-  input_mode: string;
-  /** The font size of the candidate window. */
-  candidate_font_size: number;
-  /** The Windows font face name of the candidate window. */
-  candidate_font_name: string;
-  /**
-   * The candidate window layout.
-   * @remarks
-   * Valid options: "vertical" and "horizontal".
-   */
-  candidate_layout: string;
-  /**
-   * The keyboard layout.
-   * @remarks
-   * Valid options: "Standard", "Hsu", "ETen", "ETen26", "IBM", "HanyuPinyin"
-   */
-  layout: string;
-  /**
-   * The selection phrase.
-   * @remarks
-   * Valid options: "before_cursor" and "after_cursor".
-   */
-  select_phrase: string;
-  /** The candidate keys like "123456789", "asdfghjkl" and so on. */
-  candidate_keys: string;
-  /** The number of candidate keys. */
-  candidate_keys_count: number;
-  /** Whether ESC key clears all of the composing buffer. */
-  esc_key_clear_entire_buffer: boolean;
-  /** Whether to use jk key to move cursor. */
-  moving_cursor_option: MovingCursorOption;
-  /** Whether Shift key toggles the BPMF/Alphabet mode. */
-  shift_key_toggle_alphabet_mode: boolean;
-  /** Whether Traditional/Simplified Chinese conversion is on. */
-  chineseConversion: boolean;
-  /**
-   * Whether the input method moves the cursor to the place of the end of the
-   * selected candidate.
-   * @remarks
-   * Only works when select_phrase is "after_cursor"
-   */
-  move_cursor: boolean;
-  /** Inputs upper case or lower case letters when shift key is pressed. */
-  letter_mode: string;
-  /**
-   * Whether input half width punctuation instead of default full width
-   * punctuation.
-   */
-  half_width_punctuation: boolean;
-  /** Whether the input method is deactivated on Windows 8 and above. */
-  by_default_deactivated: boolean;
-  /** Whether prompts sound alerts when a user inputs invalid keys. */
-  beep_on_error: boolean;
-  /** The behavior for handling Ctrl+ Enter key. */
-  ctrl_enter_option: number;
-  /** Whether to use repeated punctuation to choose candidate. */
-  repeated_punctuation_choose_candidate: boolean;
-  /** Whether BPMF font annotation support is enabled. */
-  bopomofo_font_annotation_support_enabled: boolean;
-  /** Whether mixed Chinese/English input (automatic detection) is on. */
-  mixed_mode: boolean;
-  /** Whether to put a space between Chinese and English in mixed mode. */
-  mixed_auto_space: boolean;
-}
 
 /**
  * A middle data structure between McBopomofo input controller and PIME.
@@ -114,31 +45,6 @@ interface UiState {
   hideMessage: boolean;
 }
 
-/**  The default settings. */
-const defaultSettings: Settings = {
-  input_mode: "use_mcbopomofo",
-  candidate_font_size: 16,
-  candidate_font_name: kDefaultCandidateFont,
-  candidate_layout: "vertical",
-  layout: "standard",
-  select_phrase: "before_cursor",
-  candidate_keys: "123456789",
-  candidate_keys_count: 9,
-  esc_key_clear_entire_buffer: false,
-  shift_key_toggle_alphabet_mode: true,
-  chineseConversion: false,
-  move_cursor: true,
-  letter_mode: "upper",
-  half_width_punctuation: false,
-  by_default_deactivated: false,
-  beep_on_error: true,
-  ctrl_enter_option: 0,
-  moving_cursor_option: MovingCursorOption.Disabled,
-  repeated_punctuation_choose_candidate: false,
-  bopomofo_font_annotation_support_enabled: false,
-  mixed_mode: true,
-  mixed_auto_space: true,
-};
 
 /**
  * The commands for PIME McBopomofo.
@@ -257,20 +163,11 @@ class PimeMcBopomofo {
     this.inputController.reset();
   }
 
-  /** The path to the PIME user data folder. */
-  readonly pimeUserDataPath: string = path.join(
-    process.env.APPDATA || "",
-    "PIME",
-  );
-
   /**
-   * The path to the user data folder. MixZhuyin keeps its own folder so it
-   * can be installed next to McBopomofo without sharing settings.
+   * The path to the user data folder, `%APPDATA%\MixZhuyin`. The all-in-one
+   * build is its own product, so it no longer shares PIME's folder.
    */
-  readonly mcBopomofoUserDataPath: string = path.join(
-    this.pimeUserDataPath,
-    "mixzhuyin",
-  );
+  readonly mcBopomofoUserDataPath: string = userDataDir(process.env);
 
   /** The path to the user phrases file. */
   readonly userPhrasesPath: string = path.join(
@@ -689,14 +586,27 @@ class PimeMcBopomofo {
     };
   }
 
+  /**
+   * Opens a settings page with config_tool.js, run by the same Node.js as the
+   * input method, so no Python is needed.
+   * @param page "options", "user_phrases" or "help".
+   */
+  public openConfigTool(page: string): void {
+    const script = path.join(__dirname, "config_tool.js");
+    console.log("Run " + script + " " + page);
+    const child = child_process.spawn(process.execPath, [script, page], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.on("error", (e) => console.error(e));
+    child.unref();
+  }
+
   /** Creates the user phrases file if it does not exist. */
   public createUserPhrasesIfNotExists(): void {
-    if (!fs.existsSync(pimeMcBopomofo.pimeUserDataPath)) {
-      fs.mkdirSync(pimeMcBopomofo.pimeUserDataPath);
-    }
-
     if (!fs.existsSync(pimeMcBopomofo.mcBopomofoUserDataPath)) {
-      fs.mkdirSync(pimeMcBopomofo.mcBopomofoUserDataPath);
+      fs.mkdirSync(pimeMcBopomofo.mcBopomofoUserDataPath, { recursive: true });
     }
 
     const userPhrasesUrl = pimeMcBopomofo.userPhrasesPath;
@@ -752,55 +662,25 @@ class PimeMcBopomofo {
       case PimeMcBopomofoCommand.OpenOptions:
         {
           this.createUserPhrasesIfNotExists();
-          const python3 = path.join(
-            __dirname,
-            "..",
-            "..",
-            "..",
-            "python",
-            "python3",
-            "python.exe",
-          );
-          const script = path.join(__dirname, "config_tool.py");
-          const command = `"${python3}" "${script}"`;
-          console.log("Run " + command);
-          child_process.exec(command);
+          this.openConfigTool("options");
         }
         break;
       case PimeMcBopomofoCommand.EditUserPhrase:
         {
           this.createUserPhrasesIfNotExists();
-          const python3 = path.join(
-            __dirname,
-            "..",
-            "..",
-            "..",
-            "python",
-            "python3",
-            "python.exe",
-          );
-          const script = path.join(__dirname, "config_tool.py");
-          const command = `"${python3}" "${script}" user_phrases`;
-          console.log("Run " + command);
-          child_process.exec(command);
+          this.openConfigTool("user_phrases");
         }
         break;
       case PimeMcBopomofoCommand.OpenUserPhrase:
         {
           this.createUserPhrasesIfNotExists();
-          const url = pimeMcBopomofo.userPhrasesPath;
-          const command = `start ${url}`;
-          console.log("Run " + command);
-          child_process.exec(command);
+          openWithShell(pimeMcBopomofo.userPhrasesPath);
         }
         break;
       case PimeMcBopomofoCommand.OpenExcludedPhrase:
         {
           this.createUserPhrasesIfNotExists();
-          const url = pimeMcBopomofo.excludedPhrasesPath;
-          const command = `start ${url}`;
-          console.log("Run " + command);
-          child_process.exec(command);
+          openWithShell(pimeMcBopomofo.excludedPhrasesPath);
         }
         break;
       case PimeMcBopomofoCommand.ToggleChineseConversion:
@@ -817,29 +697,14 @@ class PimeMcBopomofo {
         break;
       case PimeMcBopomofoCommand.Help:
         {
-          const python3 = path.join(
-            __dirname,
-            "..",
-            "..",
-            "..",
-            "python",
-            "python3",
-            "python.exe",
-          );
-          const script = path.join(__dirname, "config_tool.py");
-          const command = `"${python3}" "${script}" help`;
-          console.log("Run " + command);
-          child_process.exec(command);
+          this.openConfigTool("help");
         }
         break;
       case PimeMcBopomofoCommand.OpenMcBopomofoUserDataFolder: {
         if (!fs.existsSync(pimeMcBopomofo.mcBopomofoUserDataPath)) {
           fs.mkdirSync(pimeMcBopomofo.mcBopomofoUserDataPath);
         }
-        const url = pimeMcBopomofo.mcBopomofoUserDataPath;
-        const command = `start ${url}`;
-        console.log("Run " + command);
-        child_process.exec(command);
+        openWithShell(pimeMcBopomofo.mcBopomofoUserDataPath);
         break;
       }
       case PimeMcBopomofoCommand.ReloadUserPhrase:
@@ -859,6 +724,18 @@ class PimeMcBopomofo {
         break;
     }
   }
+}
+
+// The PIME add-on kept its data in %APPDATA%\PIME\mixzhuyin; bring settings,
+// user phrases and learning along the first time the all-in-one build runs.
+try {
+  if (
+    migrateUserData(legacyUserDataDir(process.env), userDataDir(process.env))
+  ) {
+    console.log("Copied user data from the PIME add-on");
+  }
+} catch (e) {
+  console.error(e);
 }
 
 const pimeMcBopomofo = new PimeMcBopomofo();

@@ -44,12 +44,11 @@ window.onload = () => {
     previewCandidates.slice(0, count).forEach((candidate, index) => {
       const item = document.createElement("span");
       const key = document.createElement("b");
-      key.textContent = `${keys[index]}.`;
+      key.textContent = keys[index];
       const text = document.createElement("i");
       text.textContent = candidate;
-      text.style.fontStyle = "normal";
       if (index === 0) {
-        text.className = "current";
+        item.className = "current";
       }
       item.append(key, text);
       preview.append(item);
