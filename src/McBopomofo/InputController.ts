@@ -219,8 +219,15 @@ export class InputController {
 
   /** Sets if the input controller should use traditional mode or not. */
   public setTraditionalMode(flag: boolean): void {
+    // Settings are applied again whenever they load or change. Keep the
+    // key handler, and with it what is being typed, unless the mode changes.
+    if (this.keyHandler_.traditionalMode === flag) {
+      return;
+    }
     const onError = this.onError_;
     const settings = this.keyHandler_.exportSettings();
+    const dropStrayKeys = this.keyHandler_.mixedDropStrayKeys;
+    const mixedLearning = this.keyHandler_.mixedComposer.exportLearning();
 
     const macroConverter = this.lm_.getMacroConverter();
     const converter = this.lm_.getConverter();
@@ -245,6 +252,8 @@ export class InputController {
     this.keyHandler_ = new KeyHandler(this.lm_, this.localizedStrings_);
     this.keyHandler_.traditionalMode = flag;
     this.keyHandler_.restoreSettings(settings);
+    this.keyHandler_.mixedDropStrayKeys = dropStrayKeys;
+    this.keyHandler_.mixedComposer.importLearning(mixedLearning);
     this.onError_ = onError;
   }
 
@@ -572,6 +581,9 @@ export class InputController {
    * is used, so users do not switch modes.
    */
   public setMixedMode(flag: boolean): void {
+    if (flag === this.keyHandler_.mixedMode) {
+      return;
+    }
     this.enterNewState(new Empty());
     this.keyHandler_.mixedMode = flag;
   }

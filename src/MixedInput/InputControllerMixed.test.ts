@@ -80,4 +80,34 @@ describe("InputController in mixed mode", () => {
       { text: "記得帶傘", style: "normal" },
     ]);
   });
+
+  // The settings file loads a moment after the backend starts and applies
+  // every setting again. Keys typed before that must not be lost.
+  test("applying unchanged settings keeps what is being typed", () => {
+    const { controller, last } = setUp();
+    type(controller, "s");
+    controller.setTraditionalMode(false);
+    controller.setKeyboardLayout("Standard");
+    controller.setMixedMode(true);
+    controller.setMixedAutoSpace(true);
+    controller.setMixedDropStrayKeys(true);
+    type(controller, "u3cl3");
+    expect(last().composingBuffer.map((s) => s.text).join("")).toBe("你好");
+  });
+
+  test("switching traditional mode keeps what mixed mode learned", () => {
+    const { controller } = setUp();
+    type(controller, "103");
+    controller.mixedShiftTap();
+    controller.mcbopomofoKeyEvent(Key.namedKey(KeyName.RETURN));
+    const learned = controller.exportMixedLearning();
+    expect(learned).toContain("103");
+
+    controller.setTraditionalMode(false);
+    expect(controller.exportMixedLearning()).toBe(learned);
+    controller.setTraditionalMode(true);
+    expect(controller.exportMixedLearning()).toBe(learned);
+    controller.setTraditionalMode(false);
+    expect(controller.exportMixedLearning()).toBe(learned);
+  });
 });
