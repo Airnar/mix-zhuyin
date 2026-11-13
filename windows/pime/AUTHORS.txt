@@ -1,0 +1,30 @@
+Hong Jen Yee (PCMan) <pcman.tw@gmail.com>:
+* Original author of PIME and libIME
+* Intial port of the chewing module
+
+Ken Luo <ken670128@hotmail.com>:
+* All cin-based python modules:
+* NSIS installer
+
+lyenliang <lyenliang@gmail.com>:
+* new cj input method module (merged into checj later)
+
+Jessy Lee <jessy1092@gmail.com>L
+* Node.js support
+* emojime input module
+
+Ahbong Chang (cwahbong) <cw.ahbong@gmail.com>:
+* TSF UILess mode support
+
+Osfans <waxaca@163.com>:
+* RIME support
+
+AI Assistance:
+Gemini (Google DeepMind):
+* Assisted in the implementation and refactoring of PIMELauncher2.
+* Wrote the test suite based on system designs and test cases defined by PCMan.
+* Note: The modular architecture and structural decoupling were designed by
+  Hong Jen Yee (PCMan). The AI assistant learned the core project architecture
+  by referencing the original PIMELauncher C++ implementation (also by PCMan).
+  The human author significantly modified and audited all code to ensure
+  correctness and maintain full copyright.
