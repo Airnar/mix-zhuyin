@@ -24,7 +24,7 @@ on:
         default: ""
       corpus_repeat:
         description: "Times the colloquial corpus is counted"
-        default: "20"
+        default: "50"
 
 permissions:
   contents: write
