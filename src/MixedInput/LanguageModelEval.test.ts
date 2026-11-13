@@ -20,6 +20,8 @@ import { BigramModel } from "./BigramModel";
 import { englishData } from "./EnglishData";
 import { EnglishModel } from "./EnglishModel";
 import { keysForReading, MixedDecoder } from "./MixedDecoder";
+import { trigramData } from "./TrigramData";
+import { TrigramModel } from "./TrigramModel";
 
 const heldoutPath = process.env.MIX_LM_EVAL;
 const reportPath = process.env.MIX_LM_EVAL_REPORT;
@@ -112,6 +114,16 @@ describe("language model evaluation", () => {
         d.params.bigramWeight = w;
         results.push(score(`bigram, weight ${w}`, d, cases));
       }
+      const trigram = new TrigramModel(trigramData);
+      if (trigram.size > 0) {
+        for (const w of weights) {
+          const d = new MixedDecoder(lm, english, layout);
+          d.bigramModel = bigram;
+          d.trigramModel = trigram;
+          d.params.trigramWeight = w;
+          results.push(score(`bigram + trigram, trigram weight ${w}`, d, cases));
+        }
+      }
       const pct = (a: number, b: number): string =>
         ((100 * a) / Math.max(1, b)).toFixed(2) + "%";
       const rows = results.map(
@@ -123,7 +135,8 @@ describe("language model evaluation", () => {
       );
       const report = [
         `Held-out sentences: ${cases.length} (of ${lines.length}), ` +
-          `${results[0].chars} characters. Bigram pairs: ${bigram.size}.`,
+          `${results[0].chars} characters. Bigram pairs: ${bigram.size}. ` +
+          `Trigram triples: ${trigram.size}.`,
         "",
         "| Model | Character accuracy | Sentence accuracy | Time per sentence |",
         "| --- | --- | --- | --- |",

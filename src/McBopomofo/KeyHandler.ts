@@ -28,6 +28,8 @@ import {
   MixedCandidate,
   MixedComposer,
   MixedDecoder,
+  trigramData,
+  TrigramModel,
 } from "../MixedInput";
 import { CtrlEnterOption } from "./CtrlEnterOption";
 import { DictionaryServices } from "./DictionaryServices";
@@ -154,6 +156,15 @@ function getSharedEnglishModel(): EnglishModel {
   return sharedEnglishModel;
 }
 
+let sharedTrigramModel: TrigramModel | null | undefined;
+/** The bundled word-triple model, or undefined if none has been trained. */
+function getSharedTrigramModel(): TrigramModel | undefined {
+  if (sharedTrigramModel === undefined) {
+    sharedTrigramModel = trigramData ? new TrigramModel(trigramData) : null;
+  }
+  return sharedTrigramModel ?? undefined;
+}
+
 let sharedBigramModel: BigramModel | null | undefined;
 /** The bundled word-pair model, or undefined if none has been trained. */
 function getSharedBigramModel(): BigramModel | undefined {
@@ -276,6 +287,7 @@ export class KeyHandler {
         this.keyboardLayout
       );
       decoder.bigramModel = getSharedBigramModel();
+      decoder.trigramModel = getSharedTrigramModel();
       decoder.punctuationLookup = (k: string) => {
         const prefix = this.halfWidthPunctuation_
           ? kHalfPunctuationPrefix

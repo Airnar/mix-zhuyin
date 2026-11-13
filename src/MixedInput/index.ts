@@ -31,3 +31,5 @@ export {
   PhraseOverride,
   RunSyllable,
 } from "./MixedDecoder";
+export { trigramData } from "./TrigramData";
+export { TrigramModel } from "./TrigramModel";

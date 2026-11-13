@@ -9,6 +9,7 @@ import { LanguageModel, Unigram } from "../Gramambular2";
 import { BopomofoKeyboardLayout, BopomofoSyllable } from "../Mandarin";
 import { BigramModel, kSentenceStart } from "./BigramModel";
 import { EnglishModel } from "./EnglishModel";
+import { TrigramModel } from "./TrigramModel";
 
 /**
  * Mixed Chinese/English decoding.
@@ -177,6 +178,8 @@ export class MixedDecoderParams {
   bigramPhrasesPerReading = 8;
   /** Partial sentences kept at each syllable when rescoring. */
   bigramBeam = 12;
+  /** How much word-triple bonuses count (0 turns the trigram model off). */
+  trigramWeight = 1.0;
 }
 
 interface LatticeNode {
@@ -238,6 +241,12 @@ export class MixedDecoder {
    * that phrases fit their neighbors (帶傘 rather than 代傘).
    */
   bigramModel: BigramModel | undefined;
+
+  /**
+   * Optional word-triple model, used with (or without) the bigram model when
+   * Chinese runs are re-read: two words of context instead of one.
+   */
+  trigramModel: TrigramModel | undefined;
 
   /** Maps a punctuation key to its output in Chinese context. */
   punctuationLookup: (key: string) => string | undefined = (key) =>
@@ -829,7 +838,8 @@ export class MixedDecoder {
     }
     tokens.reverse();
     const finalTokens =
-      this.bigramModel && P.bigramWeight > 0
+      (this.bigramModel && P.bigramWeight > 0) ||
+      (this.trigramModel && P.trigramWeight > 0)
         ? this.rescoreChinese_(tokens, options)
         : tokens;
 
@@ -846,7 +856,10 @@ export class MixedDecoder {
     return { tokens: finalTokens, cost: total };
   }
 
-  /** Re-reads every run of consecutive Chinese tokens with the bigram model. */
+  /**
+   * Re-reads every run of consecutive Chinese tokens with the bigram and
+   * trigram models.
+   */
   private rescoreChinese_(
     tokens: MixedToken[],
     options: DecodeOptions,
@@ -881,11 +894,28 @@ export class MixedDecoder {
 
   /**
    * Viterbi over a phrase lattice for one Chinese run: unigram scores plus
-   * weighted word-pair bonuses. Phrases the user picked stay as they are.
+   * weighted word-pair and word-triple bonuses. Phrases the user picked stay
+   * as they are.
    */
   private rescoreRun_(run: MixedToken[], left: string | null): MixedToken[] {
     const P = this.params;
-    const bigram = this.bigramModel!;
+    const bigram = this.bigramModel;
+    const trigram = this.trigramModel;
+    // The context bonus for `next` after `prev` (and the word before it).
+    const contextBonus = (
+      prev2: string | null,
+      prev: string | null,
+      next: string,
+    ): number => {
+      if (prev === null) {
+        return 0;
+      }
+      let bonus = bigram ? P.bigramWeight * bigram.bonus(prev, next) : 0;
+      if (trigram && prev2 !== null) {
+        bonus += P.trigramWeight * trigram.bonus(prev2, prev, next);
+      }
+      return bonus;
+    };
     const readings: string[] = [];
     const starts: number[] = [];
     const pinnedAt = new Map<number, MixedToken>();
@@ -952,10 +982,9 @@ export class MixedDecoder {
       ending.push([]);
     }
     for (const node of nodesFrom(0)) {
-      const bonus = left === null ? 0 : bigram.bonus(left, node.value);
       ending[node.end].push({
         node,
-        score: node.score + P.bigramWeight * bonus,
+        score: node.score + contextBonus(null, left, node.value),
         prev: null,
       });
     }
@@ -970,8 +999,9 @@ export class MixedDecoder {
         let best: Hypothesis = kept[0];
         let bestScore = Number.NEGATIVE_INFINITY;
         for (const h of kept) {
+          const prev2 = h.prev ? h.prev.node.value : left;
           const score =
-            h.score + P.bigramWeight * bigram.bonus(h.node.value, node.value);
+            h.score + contextBonus(prev2, h.node.value, node.value);
           if (score > bestScore) {
             bestScore = score;
             best = h;

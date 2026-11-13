@@ -16,6 +16,15 @@ on:
       max_pairs:
         description: "Word pairs to keep"
         default: "300000"
+      max_triples:
+        description: "Word triples to keep (0 = no trigram model)"
+        default: "200000"
+      corpus_branch:
+        description: "Branch to take tools/mixed/corpus/colloquial.txt from (empty: the checked-out one)"
+        default: ""
+      corpus_repeat:
+        description: "Times the colloquial corpus is counted"
+        default: "20"
 
 permissions:
   contents: write
@@ -34,10 +43,22 @@ jobs:
       - name: Install Python packages
         run: pip install opencc datasets
 
+      - name: Get the colloquial corpus
+        run: |
+          if [ -n "${{ inputs.corpus_branch }}" ]; then
+            git fetch --depth 1 origin "${{ inputs.corpus_branch }}"
+            git show FETCH_HEAD:tools/mixed/corpus/colloquial.txt > colloquial.txt
+          elif [ -f tools/mixed/corpus/colloquial.txt ]; then
+            cp tools/mixed/corpus/colloquial.txt colloquial.txt
+          fi
+          if [ -f colloquial.txt ]; then wc -l colloquial.txt; fi
+
       - name: Train
         run: >
           python tools/mixed/train_bigram.py
           $(for x in ${{ inputs.sources }}; do printf -- "--hf %s " "$x"; done)
+          $( [ -f colloquial.txt ] && printf -- "--text-file colloquial.txt --text-repeat %s " "${{ inputs.corpus_repeat }}" )
+          $( [ "${{ inputs.max_triples }}" != "0" ] && printf -- "--trigram-output src/MixedInput/TrigramData.ts --max-triples %s " "${{ inputs.max_triples }}" )
           --max-pairs "${{ inputs.max_pairs }}"
           --heldout heldout.txt
           --heldout-count 2000
@@ -71,10 +92,10 @@ jobs:
           mkdir -p tools/mixed/reports
           cp lm-eval.md "tools/mixed/reports/bigram-${{ github.run_number }}.md" || true
           cp heldout.txt src/MixedInput/testdata/heldout.txt
-          git add src/MixedInput/BigramData.ts src/MixedInput/testdata/heldout.txt tools/mixed/reports
+          git add src/MixedInput/BigramData.ts src/MixedInput/TrigramData.ts src/MixedInput/testdata/heldout.txt tools/mixed/reports
           git commit -q \
             -m "feat: train bigram model (run ${{ github.run_number }})" \
-            -m "Sources: ${{ inputs.sources }}; up to ${{ inputs.max_pairs }} pairs." \
+            -m "Sources: ${{ inputs.sources }} ${{ inputs.corpus_branch }}; up to ${{ inputs.max_pairs }} pairs, ${{ inputs.max_triples }} triples." \
             -m "Evaluation outcome: ${{ steps.evaluate.outcome }}; see tools/mixed/reports."
           git push origin "$branch"
 

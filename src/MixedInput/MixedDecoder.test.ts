@@ -14,6 +14,7 @@ import { englishData } from "./EnglishData";
 import { EnglishModel } from "./EnglishModel";
 import { keysForReading, MixedDecoder, MixedTokenType } from "./MixedDecoder";
 import sentences from "./testdata/sentences.json";
+import { TrigramModel } from "./TrigramModel";
 
 interface Segment {
   lang: "zh" | "en";
@@ -284,6 +285,20 @@ describe("MixedDecoder with a bigram model", () => {
     const d = makeDecoder();
     d.bigramModel = new BigramModel("帶\t傘 200\n");
     d.params.bigramWeight = 0;
+    expect(decodeText(d, keys)).toBe("記得代傘");
+  });
+
+  test("a trigram bonus uses two words of context", () => {
+    const d = makeDecoder();
+    d.trigramModel = new TrigramModel("記得 帶\t傘 200\n");
+    expect(decodeText(d, keys)).toBe("記得帶傘");
+    d.params.trigramWeight = 0;
+    expect(decodeText(d, keys)).toBe("記得代傘");
+  });
+
+  test("a trigram needs its whole context", () => {
+    const d = makeDecoder();
+    d.trigramModel = new TrigramModel("忘了 帶\t傘 200\n");
     expect(decodeText(d, keys)).toBe("記得代傘");
   });
 
