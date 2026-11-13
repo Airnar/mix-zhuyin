@@ -108,7 +108,7 @@
 </tr>
 <tr>
 <td>單按 <kbd>Shift</kbd></td>
-<td>組字中：把游標所在那段中英互換；沒有組字時：切換英文模式</td>
+<td>組字中：把游標所在那段中英互換（數字和注音也能互換，例如 103 ↔ 版）；沒有組字時：切換英文模式</td>
 </tr>
 <tr>
 <td><kbd>Tab</kbd></td>
@@ -120,6 +120,7 @@
 </tr>
 </tbody>
 </table>
+<p>上排數字也是注音鍵。整串數字剛好拼成有聲調的注音、而且打在最後時（例如 103 = ㄅㄢˇ），會當成中文；後面接空白或其他字時（103 年）則當成數字。按 Shift 互換後送出，下次同樣的數字會照你上次的選擇。</p>
 <p>中文與英文、數字之間會自動加半形空白（可在設定關閉）。</p>
 <h2 id="判斷準確度" class="tsd-anchor-link">判斷準確度<a href="#判斷準確度" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>測試集是 146 句純中文、純英文與中英混合句（<a href="media/sentences.json"><code>testdata/sentences.json</code></a>），在各鍵盤配置下打出來後檢查中英判斷：</p>
