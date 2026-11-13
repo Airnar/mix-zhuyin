@@ -33,6 +33,7 @@ SetCompressor /SOLID lzma
 !define RUN_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
 !define LAUNCHER "MixZhuyinLauncher.exe"
 !define DLL "MixZhuyinTextService.dll"
+!define CLSID "{A64DF4E9-E913-47D2-A89A-CF3134688E0D}"
 !define HOMEPAGE "https://github.com/Airnar/mix-zhuyin"
 !define IME_ICON "node\input_methods\MixZhuyin\icon.ico"
 
@@ -249,6 +250,9 @@ Section "Uninstall"
   DetailPrint "從 Windows 移除輸入法…"
   !insertmacro RegisterMixZhuyin "/u"
 
+  ; regsvr32 /u removes the profiles and categories; drop what TSF may keep
+  ; of the empty TIP key. (The per-user list is the DLL's job, see above.)
+  DeleteRegKey HKLM "SOFTWARE\Microsoft\CTF\TIP\${CLSID}"
   DeleteRegValue HKLM "${RUN_KEY}" "MixZhuyinLauncher"
   DeleteRegKey HKLM "${PRODUCT_KEY}"
   DeleteRegKey HKLM "${UNINST_KEY}"

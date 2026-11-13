@@ -41,5 +41,7 @@ commits carry the changes. In short:
   `MessageWindow`, `ImeWindow` and `Window` draw the candidate and message
   windows in Windows light/dark colors with rounded corners; the text service
   creates its font with ClearType and Microsoft JhengHei UI.
+- **Fix**: `ImeModule::unregisterServer` registered the systray category
+  instead of unregistering it, leaving the TIP key behind after uninstall.
 - **Config tool**: `onConfigure` starts the config tool hidden (it is
   `node.exe config_tool.js`, which opens the browser itself).

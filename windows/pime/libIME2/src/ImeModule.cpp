@@ -356,7 +356,9 @@ HRESULT ImeModule::unregisterServer() {
         if(::IsWindows8OrGreater()) {
             // Windows 8 support
             categoryMgr->UnregisterCategory(textServiceClsid_, GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT, textServiceClsid_);
-            categoryMgr->RegisterCategory(textServiceClsid_, GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT, textServiceClsid_);
+            // Upstream registered this category here by mistake, which left
+            // the TIP key behind after uninstalling.
+            categoryMgr->UnregisterCategory(textServiceClsid_, GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT, textServiceClsid_);
         }
 
         categoryMgr->Release();
