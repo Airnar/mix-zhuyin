@@ -75,6 +75,10 @@ public:
 
 	bool onPreservedKey(const GUID& guid);
 
+	// Asks the backend for results that arrived after the last key
+	// (TextService::scheduleRefresh).
+	void onRefresh(Ime::EditSession* session);
+
 	bool onCommand(UINT id, Ime::TextService::CommandType type);
 
 	// called when a language bar button needs a menu

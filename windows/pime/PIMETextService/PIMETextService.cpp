@@ -27,6 +27,7 @@
 #include "resource.h"
 #include <Shellapi.h>
 #include <sys/stat.h>
+#include <map>
 
 using namespace std;
 
@@ -37,6 +38,7 @@ TextService::TextService(ImeModule* module):
 	client_(nullptr),
 	messageWindow_(nullptr),
 	messageTimerId_(0),
+	refreshTimerId_(0),
 	validCandidateListElementId_(false),
 	candidateListElementId_(0),
 	candidateWindow_(nullptr),
@@ -61,6 +63,7 @@ TextService::TextService(ImeModule* module):
 }
 
 TextService::~TextService(void) {
+	cancelRefresh();
 	if (client_) {
 		closeClient();
 	}
@@ -89,6 +92,7 @@ void TextService::onActivate() {
 
 // virtual
 void TextService::onDeactivate() {
+	cancelRefresh();
 	if(client_) {
 		closeClient();
 	}
@@ -368,6 +372,66 @@ void TextService::showMessage(Ime::EditSession* session, std::wstring message, i
 	messageWindow_->show();
 
 	messageTimerId_ = ::SetTimer(messageWindow_->hwnd(), 1, duration * 1000, (TIMERPROC)TextService::onMessageTimeout);
+}
+
+namespace {
+// Thread timers have no window to carry the text service, so look it up.
+thread_local std::map<UINT_PTR, TextService*> refreshTimers;
+}
+
+void TextService::scheduleRefresh(int ms) {
+	cancelRefresh();
+	refreshTimerId_ = ::SetTimer(NULL, 0, ms < 50 ? 50 : ms, (TIMERPROC)TextService::onRefreshTimer);
+	if (refreshTimerId_) {
+		refreshTimers[refreshTimerId_] = this;
+	}
+}
+
+void TextService::cancelRefresh() {
+	if (refreshTimerId_) {
+		::KillTimer(NULL, refreshTimerId_);
+		refreshTimers.erase(refreshTimerId_);
+		refreshTimerId_ = 0;
+	}
+}
+
+// static
+void CALLBACK TextService::onRefreshTimer(HWND hwnd, UINT msg, UINT_PTR id, DWORD time) {
+	::KillTimer(NULL, id);
+	auto it = refreshTimers.find(id);
+	if (it == refreshTimers.end()) {
+		return;
+	}
+	TextService* service = it->second;
+	refreshTimers.erase(it);
+	service->refreshTimerId_ = 0;
+	service->refresh();
+}
+
+void TextService::refresh() {
+	if (!client_ || threadMgr() == nullptr) {
+		return;
+	}
+	Ime::ComPtr<ITfDocumentMgr> documentMgr;
+	if (threadMgr()->GetFocus(&documentMgr) != S_OK || documentMgr == nullptr) {
+		return;
+	}
+	Ime::ComPtr<ITfContext> context;
+	if (documentMgr->GetTop(&context) != S_OK || context == nullptr) {
+		return;
+	}
+	// The session may run after this returns; keep the service alive.
+	Ime::ComPtr<TextService> self(this);
+	auto session = Ime::ComPtr<Ime::EditSession>::make(
+		context,
+		[self](Ime::EditSession* session, TfEditCookie cookie) {
+			if (self->client_) {
+				self->client_->onRefresh(session);
+			}
+		}
+	);
+	HRESULT sessionResult;
+	context->RequestEditSession(clientId(), session, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, &sessionResult);
 }
 
 void TextService::showLookup(std::wstring message, int duration) {

@@ -3,6 +3,7 @@
  * (pime.ts) and the settings page server (pime_config_tool.ts), which must not
  * pull in the whole engine.
  */
+import { kDefaultAiBaseUrl, kDefaultAiModel } from "./pime_ai";
 import { kDefaultCandidateFont } from "./pime_ui";
 
 /**
@@ -75,6 +76,14 @@ export interface Settings {
   mixed_auto_space: boolean;
   /** Mixed mode: drop stray keys typed between Chinese syllables. */
   mixed_drop_stray_keys: boolean;
+  /** Whether the AI keys (Ctrl+Enter, and Ctrl+E / Ctrl+R after a lookup) work. */
+  ai_enabled: boolean;
+  /** The OpenAI-compatible API root of the model (Ollama by default). */
+  ai_base_url: string;
+  /** The model name. */
+  ai_model: string;
+  /** An API key, if the server needs one (Ollama does not). */
+  ai_api_key: string;
 }
 
 /** The default settings, used when the settings file lacks a key. */
@@ -102,4 +111,8 @@ export const defaultSettings: Settings = {
   mixed_mode: true,
   mixed_auto_space: true,
   mixed_drop_stray_keys: true,
+  ai_enabled: false,
+  ai_base_url: kDefaultAiBaseUrl,
+  ai_model: kDefaultAiModel,
+  ai_api_key: "",
 };

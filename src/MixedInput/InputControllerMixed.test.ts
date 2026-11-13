@@ -194,4 +194,48 @@ describe("InputController in mixed mode", () => {
       expect(controller.readingOf("")).toBeUndefined();
     });
   });
+
+  describe("AI suggestions", () => {
+    test("mixedSnapshot tells what is being typed and how it reads", () => {
+      const { controller } = setUp();
+      expect(controller.mixedSnapshot()).toBeUndefined();
+      type(controller, "ru42k7 meeting");
+      expect(controller.mixedSnapshot()).toEqual({
+        raw: "ru42k7 meeting",
+        text: "記得 meeting",
+        readings: "ㄐㄧˋ ㄉㄜ˙ meeting",
+      });
+    });
+
+    test("showAiCandidates lists sentences and commits the chosen one", () => {
+      const { controller, last, committed } = setUp();
+      type(controller, "ru42k7294n03");
+      expect(controller.showAiCandidates(["記得帶傘", "記得帶傘喔"])).toBe(true);
+      const state = last();
+      expect(state.candidates.map((c) => c.candidate.displayedText)).toEqual([
+        "記得帶傘",
+        "記得帶傘喔",
+      ]);
+      controller.mcbopomofoKeyEvent(Key.namedKey(KeyName.DOWN));
+      controller.mcbopomofoKeyEvent(Key.namedKey(KeyName.RETURN));
+      expect(committed()).toBe("記得帶傘喔");
+      expect(controller.mixedSnapshot()).toBeUndefined();
+    });
+
+    test("Esc keeps what was typed", () => {
+      const { controller, last } = setUp();
+      type(controller, "ru42k7294n03");
+      controller.showAiCandidates(["記得帶傘"]);
+      controller.mcbopomofoKeyEvent(Key.namedKey(KeyName.ESC));
+      expect(last().candidates).toEqual([]);
+      expect(controller.mixedSnapshot()?.raw).toBe("ru42k7294n03");
+    });
+
+    test("needs a composition and suggestions", () => {
+      const { controller } = setUp();
+      expect(controller.showAiCandidates(["你好"])).toBe(false);
+      type(controller, "su3cl3");
+      expect(controller.showAiCandidates([])).toBe(false);
+    });
+  });
 });

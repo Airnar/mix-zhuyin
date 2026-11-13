@@ -57,6 +57,11 @@ commits carry the changes. In short:
   field (`{message, duration}`, no edit session needed) shows it with
   `TextService::showLookup` next to the selection. `MessageWindow` wraps
   long or multi-line text and can be created without an edit session.
+- **Asking again later**: a response field `refreshAfter` (milliseconds)
+  makes the text service set a thread timer (`TextService::scheduleRefresh`)
+  and then call the backend's new `onRefresh` method with an asynchronous
+  read/write edit session, so answers that arrive after a key (AI
+  suggestions) can update the composition, candidates or commit text.
 - **Fix**: `ImeModule::unregisterServer` registered the systray category
   instead of unregistering it, leaving the TIP key behind after uninstall.
 - **Config tool**: `onConfigure` starts the config tool hidden (it is

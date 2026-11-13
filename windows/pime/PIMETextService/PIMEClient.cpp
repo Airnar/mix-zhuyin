@@ -375,6 +375,12 @@ void Client::updateStatus(json& msg, Ime::EditSession* session) {
 		// customize the UI
 		updateUI(customizeUIVal);
 	}
+
+	// ask again later (results that arrive after the key, such as AI)
+	auto& refreshAfterVal = msg["refreshAfter"];
+	if (refreshAfterVal.is_number_integer() && refreshAfterVal.get<int>() > 0) {
+		textService_->scheduleRefresh(refreshAfterVal.get<int>());
+	}
 }
 
 void Client::updateCandidateList(json& msg, Ime::EditSession* session) {
@@ -529,6 +535,16 @@ bool Client::onKeyUp(Ime::KeyEvent& keyEvent, Ime::EditSession* session) {
 		return jsonValueOr<bool>(ret, "return", false);
 	}
 	return false;
+}
+
+void Client::onRefresh(Ime::EditSession* session) {
+	if (!ensureConnected()) {
+		return;
+	}
+	json req = createRpcRequest("onRefresh");
+	json ret;
+	callRpcMethod(req, ret);
+	handleRpcResponse(ret, session);
 }
 
 bool Client::onPreservedKey(const GUID& guid) {

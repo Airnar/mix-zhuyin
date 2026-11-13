@@ -23,6 +23,10 @@ window.onload = () => {
     mixed_mode: true,
     mixed_auto_space: true,
     mixed_drop_stray_keys: true,
+    ai_enabled: false,
+    ai_base_url: "http://localhost:11434/v1",
+    ai_model: "qwen2.5:7b",
+    ai_api_key: "",
   };
 
   let settings = {};
@@ -218,6 +222,11 @@ window.onload = () => {
     {
       $("beep_on_error").checked = settings.beep_on_error;
     }
+    {
+      $("ai_enabled").checked = settings.ai_enabled === true;
+      $("ai_model").value = settings.ai_model || defaultSettings.ai_model;
+      $("ai_base_url").value = settings.ai_base_url || defaultSettings.ai_base_url;
+    }
     renderPreview();
   }
 
@@ -384,6 +393,19 @@ window.onload = () => {
     settings.by_default_deactivated = checked;
     saveSettings(settings);
   };
+
+  $("ai_enabled").onchange = () => {
+    settings.ai_enabled = $("ai_enabled").checked;
+    saveSettings(settings);
+  };
+
+  for (const id of ["ai_model", "ai_base_url"]) {
+    $(id).onchange = () => {
+      settings[id] = $(id).value.trim() || defaultSettings[id];
+      $(id).value = settings[id];
+      saveSettings(settings);
+    };
+  }
 
   $("beep_on_error").onchange = (event) => {
     const checked = $("beep_on_error").checked;

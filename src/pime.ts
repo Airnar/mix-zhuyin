@@ -15,6 +15,14 @@ import process from "process";
 import { InputController } from "./McBopomofo/InputController";
 import { Empty, Inputting, NotEmpty } from "./McBopomofo/InputState";
 import { InputUI } from "./McBopomofo/InputUI";
+import {
+  AiAssistant,
+  AiResponse,
+  chatCompletion,
+  FetchLike,
+  kDefaultAiBaseUrl,
+  kDefaultAiModel,
+} from "./pime_ai";
 import { openWithShell } from "./pime_config_tool";
 import {
   messageBoxScript,
@@ -113,6 +121,27 @@ class PimeMcBopomofo {
   lastRequest: any = {};
   /** Spots Ctrl tapped twice, for 框選查詢. */
   readonly ctrlTaps = new DoubleCtrlDetector();
+
+  /** The AI keys (off unless the user turns them on). */
+  readonly ai = new AiAssistant({
+    settings: () =>
+      this.settings.ai_enabled
+        ? {
+            baseUrl: this.settings.ai_base_url || kDefaultAiBaseUrl,
+            model: this.settings.ai_model || kDefaultAiModel,
+            apiKey: this.settings.ai_api_key || "",
+          }
+        : undefined,
+    composing: () => this.inputController.mixedSnapshot(),
+    showSuggestions: (sentences) => {
+      this.resetBeforeHandlingKey();
+      return this.inputController.showAiCandidates(sentences);
+    },
+    chat: (settings, messages) =>
+      chatCompletion(settings, messages, fetch as unknown as FetchLike),
+  });
+  /** What onKeyDown answers for a key the AI took in filterKeyDown. */
+  pendingAiResponse: AiResponse | undefined = undefined;
   // Loaded on the first lookup; null if there is no dictionary file.
   private lookupDictionary_: LookupDictionary | null | undefined = undefined;
 
@@ -134,11 +163,18 @@ class PimeMcBopomofo {
     if (typeof selection !== "string") {
       return undefined;
     }
-    const message = lookupMessage(selection, {
+    let message = lookupMessage(selection, {
       readingOf: (text) => this.inputController.readingOf(text),
       translate: (text) => this.lookupDictionary?.translate(text),
     });
-    return message ? { showLookup: { message, duration: 8 } } : undefined;
+    if (!message) {
+      return undefined;
+    }
+    const hint = this.ai.rememberLookup(selection.trim(), Date.now());
+    if (hint) {
+      message += "\n" + hint;
+    }
+    return { showLookup: { message, duration: hint ? 15 : 8 } };
   }
   /** Whether the last key down event was handled. */
   isLastFilterKeyDownHandled: boolean = false;
@@ -1072,6 +1108,23 @@ module.exports = {
 
       const { keyCode, charCode, keyStates } = request;
 
+      // AI keys: Ctrl+Enter while composing; Ctrl+E / Ctrl+R after a lookup;
+      // Enter / Esc for a rewrite.
+      const aiResponse = pimeMcBopomofo.ai.keyDown(
+        {
+          keyCode,
+          ctrl: (keyStates[VK_Keys.VK_CONTROL] & 0x80) !== 0,
+          shift: (keyStates[VK_Keys.VK_SHIFT] & 0x80) !== 0,
+          alt: (keyStates[VK_Keys.VK_MENU] & 0x80) !== 0,
+        },
+        Date.now(),
+      );
+      if (aiResponse) {
+        pimeMcBopomofo.isShiftHold = false;
+        pimeMcBopomofo.pendingAiResponse = aiResponse;
+        return Object.assign({}, responseTemplate, { return: true });
+      }
+
       const key = KeyFromKeyboardEvent(
         keyCode,
         keyStates,
@@ -1189,6 +1242,17 @@ module.exports = {
     }
 
     if (request.method === "onKeyDown") {
+      const aiResponse = pimeMcBopomofo.pendingAiResponse;
+      if (aiResponse) {
+        pimeMcBopomofo.pendingAiResponse = undefined;
+        return Object.assign(
+          {},
+          responseTemplate,
+          aiResponse.withUiState ? pimeMcBopomofo.uiState : {},
+          aiResponse.fields,
+          { return: true },
+        );
+      }
       // Ignore caps lock.
       if (pimeMcBopomofo.isCapsLockHold) {
         pimeMcBopomofo.resetController();
@@ -1215,6 +1279,17 @@ module.exports = {
         return: pimeMcBopomofo.isLastFilterKeyDownHandled,
       });
       return response;
+    }
+
+    // The text service asks again for answers that arrive after a key (AI).
+    if (request.method === "onRefresh") {
+      const refreshed = pimeMcBopomofo.ai.refresh(Date.now());
+      return Object.assign(
+        {},
+        responseTemplate,
+        refreshed.withUiState ? pimeMcBopomofo.uiState : {},
+        refreshed.fields,
+      );
     }
 
     if (request.method === "onKeyboardStatusChanged") {

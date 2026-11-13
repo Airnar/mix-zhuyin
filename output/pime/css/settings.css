@@ -172,6 +172,22 @@ select:hover {
   background-color: var(--hover);
 }
 
+.text-input {
+  width: 260px;
+  padding: 5px 11px;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--control);
+  color: inherit;
+  font: inherit;
+  user-select: text;
+}
+
+.text-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 select:focus-visible,
 .switch:focus-visible,
 .segmented input:focus-visible + label,

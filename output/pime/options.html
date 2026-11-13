@@ -248,6 +248,31 @@
             </div>
         </section>
 
+        <section class="card" aria-labelledby="ai_title">
+            <h2 id="ai_title">AI 助手</h2>
+            <div class="row">
+                <label class="row-text" for="ai_enabled">
+                    <span class="row-title">使用本機 AI</span>
+                    <span class="row-desc">組字時按 Ctrl+Enter 讓 AI 修正整句；框選查詢後按 Ctrl+E 解釋、Ctrl+R 改寫。需要先安裝 Ollama 並下載模型（例如 ollama pull qwen2.5:7b），文字不會送出這台電腦。</span>
+                </label>
+                <input type="checkbox" class="switch" name="ai_enabled" id="ai_enabled">
+            </div>
+            <div class="row">
+                <label class="row-text" for="ai_model">
+                    <span class="row-title">模型</span>
+                    <span class="row-desc">Ollama 的模型名稱。</span>
+                </label>
+                <input type="text" class="text-input" id="ai_model" spellcheck="false" placeholder="qwen2.5:7b">
+            </div>
+            <div class="row">
+                <label class="row-text" for="ai_base_url">
+                    <span class="row-title">服務位址</span>
+                    <span class="row-desc">OpenAI 相容的 API 位址，Ollama 預設是 http://localhost:11434/v1。</span>
+                </label>
+                <input type="text" class="text-input" id="ai_base_url" spellcheck="false" placeholder="http://localhost:11434/v1">
+            </div>
+        </section>
+
         <section class="card" aria-labelledby="others_title">
             <h2 id="others_title">其他</h2>
             <nav class="links">

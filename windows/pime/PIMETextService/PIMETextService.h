@@ -142,11 +142,20 @@ public:
 	// or edit session is needed.
 	void showLookup(std::wstring message, int duration);
 
+	// Asks the backend again after `ms` milliseconds (the response field
+	// refreshAfter), with an edit session, so results that arrive later
+	// (AI suggestions) can change the composition or commit text.
+	void scheduleRefresh(int ms);
+
 private:
 	virtual ~TextService(void);  // COM object should only be deleted using Release()
 
 	void onMessageTimeout();
 	static void CALLBACK onMessageTimeout(HWND hwnd, UINT msg, UINT_PTR id, DWORD time);
+
+	void refresh();
+	void cancelRefresh();
+	static void CALLBACK onRefreshTimer(HWND hwnd, UINT msg, UINT_PTR id, DWORD time);
 
 	void updateLangButtons(); // update status of language bar buttons
 
@@ -163,6 +172,7 @@ private:
 	std::vector<std::wstring> candidates_; // current candidate list
 	std::unique_ptr<Ime::MessageWindow> messageWindow_;
 	UINT messageTimerId_;
+	UINT_PTR refreshTimerId_;
 	HFONT font_;
 	bool updateFont_;
 	int candPerRow_;

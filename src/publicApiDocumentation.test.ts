@@ -44,6 +44,8 @@ describe("public API documentation", () => {
     expectDocumented(source, "public setMixedDropStrayKeys(flag: boolean): void {");
     expectDocumented(source, "public setSnippets(snippets: string[]): void {");
     expectDocumented(source, "public readingOf(text: string): string | undefined {");
+    expectDocumented(source, "public mixedSnapshot():");
+    expectDocumented(source, "public showAiCandidates(sentences: string[]): boolean {");
     expectDocumented(
       source,
       "public setExcludedPhrases(input: Map<string, string[]> | string): void {",

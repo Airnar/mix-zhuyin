@@ -173,6 +173,99 @@ const cases = [
   ["103\n\n", "103"],
 ];
 
+// Sends one key down and up with Ctrl held, as libIME does. Returns the
+// onKeyDown response if the key was claimed.
+async function ctrlKey(keyCode) {
+  const states = new Array(256).fill(0);
+  states[17] = 0x80;
+  const key = { keyCode, charCode: 0, scanCode: 0, repeatCount: 0, isExtended: false, keyStates: states };
+  let claimed = false;
+  for (let i = 0; i < 2; i++) {
+    claimed = (await send(Object.assign({ method: "filterKeyDown" }, key))).return || claimed;
+  }
+  const r = claimed ? await send(Object.assign({ method: "onKeyDown" }, key)) : undefined;
+  for (let i = 0; i < 2; i++) await send(Object.assign({ method: "filterKeyUp" }, key));
+  return r;
+}
+
+// Asks onRefresh until `done` likes a response, as the text service's timer would.
+async function refreshUntil(done) {
+  for (let i = 0; i < 30; i++) {
+    const r = await send({ method: "onRefresh" });
+    if (done(r)) return r;
+    if (!r.refreshAfter) return r;
+    await new Promise((resolve) => setTimeout(resolve, r.refreshAfter));
+  }
+  return undefined;
+}
+
+async function testAi() {
+  const http = require("http");
+  const asked = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const prompt = JSON.parse(body).messages.map((m) => m.content).join("\n");
+      asked.push(req.url);
+      const content = prompt.includes("讀音") ? "1. 記得帶傘\n2. 記得帶傘喔" : "存放和借貸金錢的機構";
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const configFile = path.join(process.env.APPDATA, "MixZhuyin", "config.json");
+  const before = fs.readFileSync(configFile, "utf8");
+  const config = Object.assign(JSON.parse(before), {
+    ai_enabled: true,
+    ai_base_url: `http://127.0.0.1:${server.address().port}/v1`,
+    ai_model: "test",
+  });
+  fs.writeFileSync(configFile, JSON.stringify(config));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  let failures = 0;
+  const check = (ok, label) => {
+    if (!ok) failures++;
+    console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
+  };
+
+  await typeKeys("ru42k7294n03");
+  const started = await ctrlKey(13);
+  check(!!started && started.refreshAfter > 0 && !!started.showMessage, "Ctrl+Enter asks the AI " + JSON.stringify(started && started.showMessage));
+  const shown = await refreshUntil((r) => Array.isArray(r.candidateList) && r.candidateList.length > 0);
+  check(
+    !!shown && shown.candidateList[0] === "記得帶傘" && shown.candidateList[1] === "記得帶傘喔" && asked[0] === "/v1/chat/completions",
+    "AI suggestions fill the candidate window " + JSON.stringify(shown && shown.candidateList)
+  );
+  const picked = await typeKeys("2");
+  check(picked.committed === "記得帶傘喔", `a candidate key commits the suggestion -> ${JSON.stringify(picked.committed)}`);
+  await typeKeys("\n");
+
+  // Lookup, then Ctrl+E.
+  const VK_CONTROL = 17;
+  let lookup;
+  for (let tap = 0; tap < 2; tap++) {
+    const down = new Array(256).fill(0);
+    down[VK_CONTROL] = 0x80;
+    const key = { keyCode: VK_CONTROL, charCode: 0, scanCode: 0, repeatCount: 0, isExtended: false };
+    for (let i = 0; i < 2; i++) await send(Object.assign({ method: "filterKeyDown", keyStates: down }, key));
+    for (let i = 0; i < 2; i++) {
+      const r = await send(Object.assign({ method: "filterKeyUp", keyStates: new Array(256).fill(0), selectionText: "銀行" }, key));
+      if (r.showLookup) lookup = r.showLookup;
+    }
+  }
+  check(!!lookup && lookup.message.includes("Ctrl+E"), "the lookup popup mentions the AI keys");
+  const explaining = await ctrlKey(0x45);
+  check(!!explaining && !!explaining.showLookup && explaining.refreshAfter > 0, "Ctrl+E after a lookup asks the AI");
+  const explained = await refreshUntil((r) => r.showLookup && r.showLookup.message.includes("機構"));
+  check(!!explained && explained.showLookup.message === "銀行\n存放和借貸金錢的機構", "the explanation shows in the popup");
+
+  fs.writeFileSync(configFile, before);
+  server.close();
+  return failures;
+}
+
 async function main() {
   await send({
     method: "init",
@@ -286,6 +379,11 @@ async function main() {
         fs.writeFileSync(file, before);
       }
     }
+  }
+
+  // AI keys against a fake Ollama (module mode only: it changes settings).
+  if (!usePipe) {
+    failures += await testAi();
   }
 
   console.log(failures ? `${failures} failed` : `all passed${usePipe ? " (through the launcher)" : ""}`);

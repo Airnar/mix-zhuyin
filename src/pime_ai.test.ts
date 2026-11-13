@@ -1,0 +1,252 @@
+import {
+  AiAssistant,
+  AiHost,
+  AiSettings,
+  chatCompletion,
+  ChatMessage,
+  correctionPrompt,
+  explainPrompt,
+  FetchLike,
+  kDefaultAiBaseUrl,
+  parseSuggestions,
+  rewritePrompt,
+} from "./pime_ai";
+
+const settings: AiSettings = {
+  baseUrl: kDefaultAiBaseUrl,
+  model: "qwen2.5:7b",
+  apiKey: "",
+};
+
+const answer = (content: unknown, ok = true, status = 200): FetchLike =>
+  jest.fn(async () => ({
+    ok,
+    status,
+    json: async () => ({ choices: [{ message: { content } }] }),
+  }));
+
+describe("chatCompletion", () => {
+  test("posts to the OpenAI-compatible chat API and returns the answer", async () => {
+    const fetchImpl = answer("記得帶傘");
+    const messages: ChatMessage[] = [{ role: "user", content: "hi" }];
+    await expect(
+      chatCompletion({ ...settings, baseUrl: "http://localhost:11434/v1/" }, messages, fetchImpl),
+    ).resolves.toBe("記得帶傘");
+    const [url, init] = (fetchImpl as jest.Mock).mock.calls[0];
+    expect(url).toBe("http://localhost:11434/v1/chat/completions");
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(JSON.parse(init.body)).toMatchObject({
+      model: "qwen2.5:7b",
+      messages,
+      stream: false,
+    });
+  });
+
+  test("sends the API key when there is one", async () => {
+    const fetchImpl = answer("ok");
+    await chatCompletion({ ...settings, apiKey: "k" }, [], fetchImpl);
+    expect((fetchImpl as jest.Mock).mock.calls[0][1].headers.Authorization).toBe(
+      "Bearer k",
+    );
+  });
+
+  test("drops a reasoning block", async () => {
+    await expect(
+      chatCompletion(settings, [], answer("<think>hmm\nok</think>\n記得帶傘")),
+    ).resolves.toBe("記得帶傘");
+  });
+
+  test("fails on HTTP errors and empty answers", async () => {
+    await expect(chatCompletion(settings, [], answer("x", false, 404))).rejects.toThrow(
+      "HTTP 404",
+    );
+    await expect(chatCompletion(settings, [], answer(undefined))).rejects.toThrow(
+      "no answer",
+    );
+  });
+
+  test("gives up after the timeout", async () => {
+    const fetchImpl: FetchLike = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    await expect(chatCompletion(settings, [], fetchImpl, 10)).rejects.toThrow("aborted");
+  });
+});
+
+describe("prompts", () => {
+  test("carry the text and its reading", () => {
+    const messages = correctionPrompt("記得代傘", "ㄐㄧˋ ㄉㄜ˙ ㄉㄞˋ ㄙㄢˇ");
+    expect(messages[0].role).toBe("system");
+    expect(messages[1].content).toContain("記得代傘");
+    expect(messages[1].content).toContain("ㄐㄧˋ ㄉㄜ˙ ㄉㄞˋ ㄙㄢˇ");
+    expect(explainPrompt("deadline")[1].content).toContain("deadline");
+    expect(rewritePrompt("我覺得還好")[1].content).toContain("我覺得還好");
+  });
+});
+
+describe("parseSuggestions", () => {
+  test("reads one suggestion per line", () => {
+    expect(
+      parseSuggestions("1. 記得帶傘\n2、「記得帶傘喔」\n- 記得帶傘\n\n* 記得要帶傘"),
+    ).toEqual(["記得帶傘", "記得帶傘喔", "記得要帶傘"]);
+  });
+
+  test("keeps at most five", () => {
+    expect(parseSuggestions("a\nb\nc\nd\ne\nf\ng")).toHaveLength(5);
+  });
+});
+
+describe("AiAssistant", () => {
+  const ctrl = (keyCode: number): { keyCode: number; ctrl: boolean; shift: boolean; alt: boolean } => ({
+    keyCode,
+    ctrl: true,
+    shift: false,
+    alt: false,
+  });
+  const plain = (keyCode: number): { keyCode: number; ctrl: boolean; shift: boolean; alt: boolean } => ({
+    keyCode,
+    ctrl: false,
+    shift: false,
+    alt: false,
+  });
+  const flush = (): Promise<void> => new Promise((r) => setImmediate(r));
+
+  const makeHost = (
+    overrides: Partial<AiHost> = {},
+  ): { host: AiHost; shown: string[][]; asked: ChatMessage[][] } => {
+    const shown: string[][] = [];
+    const asked: ChatMessage[][] = [];
+    const host: AiHost = {
+      settings: () => settings,
+      composing: () => undefined,
+      showSuggestions: (s) => {
+        shown.push(s);
+        return s.length > 0;
+      },
+      chat: async (_s, messages) => {
+        asked.push(messages);
+        return "記得帶傘\n記得帶傘喔";
+      },
+      ...overrides,
+    };
+    return { host, shown, asked };
+  };
+
+  test("does nothing while AI is off", () => {
+    const { host } = makeHost({
+      settings: () => undefined,
+      composing: () => ({ raw: "x", text: "x", readings: "x" }),
+    });
+    const ai = new AiAssistant(host);
+    expect(ai.keyDown(ctrl(0x0d), 0)).toBeUndefined();
+    expect(ai.rememberLookup("銀行", 0)).toBeUndefined();
+  });
+
+  test("Ctrl+Enter while composing suggests whole sentences", async () => {
+    const composing = { raw: "ru42k7294n03", text: "記得代傘", readings: "ㄐㄧˋ ㄉㄜ˙ ㄉㄞˋ ㄙㄢˇ" };
+    const { host, shown, asked } = makeHost({ composing: () => composing });
+    const ai = new AiAssistant(host);
+    const started = ai.keyDown(ctrl(0x0d), 0);
+    expect(started?.fields.refreshAfter).toBeGreaterThan(0);
+    expect(started?.fields.showMessage).toBeDefined();
+    expect(asked[0][1].content).toContain("記得代傘");
+
+    await flush();
+    const done = ai.refresh(100);
+    expect(shown).toEqual([["記得帶傘", "記得帶傘喔"]]);
+    expect(done).toEqual({ fields: { hideMessage: true }, withUiState: true });
+    expect(ai.refresh(200)).toEqual({ fields: {} });
+  });
+
+  test("keeps asking again until the answer is in, then gives up", () => {
+    const { host } = makeHost({
+      composing: () => ({ raw: "a", text: "a", readings: "a" }),
+      chat: () => new Promise<string>(() => undefined),
+    });
+    const ai = new AiAssistant(host, 1000);
+    ai.keyDown(ctrl(0x0d), 0);
+    expect(ai.refresh(500).fields.refreshAfter).toBeGreaterThan(0);
+    const timedOut = ai.refresh(2000);
+    expect(JSON.stringify(timedOut.fields)).toContain("Ollama");
+  });
+
+  test("drops suggestions if the user typed on", async () => {
+    let raw = "su3";
+    const { host, shown } = makeHost({
+      composing: () => ({ raw, text: "你", readings: "ㄋㄧˇ" }),
+    });
+    const ai = new AiAssistant(host);
+    ai.keyDown(ctrl(0x0d), 0);
+    raw = "su3cl3";
+    await flush();
+    expect(ai.refresh(100)).toEqual({ fields: { hideMessage: true } });
+    expect(shown).toEqual([]);
+  });
+
+  test("Ctrl+E after a lookup explains the selection", async () => {
+    const { host, asked } = makeHost({ chat: async (_s, m) => (asked.push(m), "存放金錢的機構") });
+    const ai = new AiAssistant(host);
+    expect(ai.rememberLookup("銀行", 0)).toContain("Ctrl+E");
+    const started = ai.keyDown(ctrl(0x45), 1000);
+    expect(started?.fields.showLookup).toBeDefined();
+    expect(asked[0][1].content).toContain("銀行");
+    await flush();
+    expect(ai.refresh(1100).fields.showLookup).toEqual({
+      message: "銀行\n存放金錢的機構",
+      duration: 30,
+    });
+  });
+
+  test("Ctrl+R rewrites, and Enter puts the rewrite in place", async () => {
+    const { host } = makeHost({ chat: async () => "我覺得還不錯" });
+    const ai = new AiAssistant(host);
+    ai.rememberLookup("我覺得還好", 0);
+    ai.keyDown(ctrl(0x52), 10);
+    await flush();
+    const shown = ai.refresh(100).fields.showLookup as { message: string };
+    expect(shown.message).toContain("我覺得還不錯");
+    expect(shown.message).toContain("Enter");
+    expect(ai.keyDown(plain(0x0d), 200)).toEqual({
+      fields: { commitString: "我覺得還不錯", hideMessage: true },
+    });
+    // Only once.
+    expect(ai.keyDown(plain(0x0d), 300)).toBeUndefined();
+  });
+
+  test("Esc or any other key drops the rewrite", async () => {
+    const { host } = makeHost({ chat: async () => "改寫" });
+    const ai = new AiAssistant(host);
+    ai.rememberLookup("原文", 0);
+    ai.keyDown(ctrl(0x52), 10);
+    await flush();
+    ai.refresh(100);
+    expect(ai.keyDown(plain(0x1b), 200)).toEqual({ fields: { hideMessage: true } });
+
+    ai.rememberLookup("原文", 300);
+    ai.keyDown(ctrl(0x52), 310);
+    await flush();
+    ai.refresh(400);
+    expect(ai.keyDown(plain(0x41), 500)).toBeUndefined();
+    expect(ai.keyDown(plain(0x0d), 600)).toBeUndefined();
+  });
+
+  test("Ctrl+E and Ctrl+R only work right after a lookup", () => {
+    const { host } = makeHost();
+    const ai = new AiAssistant(host);
+    expect(ai.keyDown(ctrl(0x45), 0)).toBeUndefined();
+    ai.rememberLookup("銀行", 0);
+    expect(ai.keyDown(ctrl(0x52), 60000)).toBeUndefined();
+    expect(ai.keyDown({ ...ctrl(0x45), shift: true }, 10)).toBeUndefined();
+  });
+
+  test("tells the user when the model is not there", async () => {
+    const { host } = makeHost({ chat: async () => Promise.reject(new Error("ECONNREFUSED")) });
+    const ai = new AiAssistant(host);
+    ai.rememberLookup("銀行", 0);
+    ai.keyDown(ctrl(0x45), 10);
+    await flush();
+    expect(JSON.stringify(ai.refresh(100).fields)).toContain("Ollama");
+  });
+});

@@ -137,6 +137,7 @@ export class KeyHandlerSettings {
 /** Prefix of the readings of candidates in mixed mode. */
 const kMixedCandidatePrefix = "_mix_";
 const kSnippetCandidatePrefix = "_snippet_";
+const kAiCandidatePrefix = "_ai_";
 /** How many characters of a snippet the candidate window shows. */
 const kSnippetLabelLength = 24;
 
@@ -312,6 +313,49 @@ export class KeyHandler {
       this.mixedComposer_.decoder.clearCache();
     }
     return this.mixedComposer_;
+  }
+
+  /**
+   * What mixed mode is composing, for an AI to correct: the raw keys, the
+   * text shown, and how it reads (Chinese as Bopomofo syllables, English as
+   * typed).
+   */
+  public mixedSnapshot():
+    | { raw: string; text: string; readings: string }
+    | undefined {
+    const c = this.mixedComposer_;
+    if (!this.mixedMode_ || !c || c.isEmpty) {
+      return undefined;
+    }
+    const readings = c.tokens
+      .map((t) =>
+        t.syllables ? t.syllables.join(" ") : (t.word ?? t.output).trim()
+      )
+      .filter((r) => r.length > 0)
+      .join(" ");
+    return { raw: c.raw, text: c.view().text, readings };
+  }
+
+  /**
+   * A candidate window of whole sentences (AI suggestions) for what mixed
+   * mode is composing. Choosing one commits it in place of the composition.
+   * @param sentences The suggestions, best first.
+   * @returns The state, or undefined if nothing is being composed.
+   */
+  public mixedSentenceCandidates(sentences: string[]): InputState | undefined {
+    const c = this.mixedComposer_;
+    if (!this.mixedMode_ || !c || c.isEmpty || sentences.length === 0) {
+      return undefined;
+    }
+    const view = c.view();
+    return new ChoosingCandidate(
+      view.text,
+      view.cursorIndex,
+      sentences.map(
+        (text, i) => new Candidate(kAiCandidatePrefix + i, text, text)
+      ),
+      view.cursorIndex
+    );
   }
 
   /** Call when the dictionary or user phrases change. */
@@ -1238,7 +1282,8 @@ export class KeyHandler {
   ): void {
     if (
       this.mixedMode_ &&
-      candidate.reading.startsWith(kSnippetCandidatePrefix)
+      (candidate.reading.startsWith(kSnippetCandidatePrefix) ||
+        candidate.reading.startsWith(kAiCandidatePrefix))
     ) {
       const c = this.mixedComposer;
       c.clear();

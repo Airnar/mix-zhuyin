@@ -610,6 +610,35 @@ export class InputController {
   }
 
   /**
+   * What mixed mode is composing, for an AI to correct.
+   * @returns The raw keys, the text shown and how it reads, or undefined if
+   *   nothing is being composed in mixed mode.
+   */
+  public mixedSnapshot():
+    | { raw: string; text: string; readings: string }
+    | undefined {
+    return this.keyHandler_.mixedSnapshot();
+  }
+
+  /**
+   * Shows whole-sentence suggestions (from an AI) for the composition in the
+   * candidate window; choosing one commits it.
+   * @param sentences The suggestions, best first.
+   * @returns False if there is no composition or no suggestion.
+   */
+  public showAiCandidates(sentences: string[]): boolean {
+    if (!(this.state_ instanceof Inputting)) {
+      return false;
+    }
+    const state = this.keyHandler_.mixedSentenceCandidates(sentences);
+    if (!state) {
+      return false;
+    }
+    this.enterNewState(state);
+    return true;
+  }
+
+  /**
    * Looks up how a phrase reads, matching the longest dictionary words first.
    * Used to give imported phrases a reading.
    * @param text The phrase.
