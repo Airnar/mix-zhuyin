@@ -1398,7 +1398,7 @@ module.exports = {
         },
         {},
         {
-          text: "混打注音 for PIME 0.1.0（基於小麥注音）",
+          text: "混打注音 for PIME 0.2.0（基於小麥注音）",
         },
       ];
       const response = Object.assign({}, responseTemplate, { return: menu });
