@@ -25,6 +25,7 @@
 #include "ImeModule.h"
 
 #include <assert.h>
+#include <InputScope.h>
 #include <string>
 #include <algorithm>
 
@@ -743,8 +744,59 @@ STDMETHODIMP TextService::OnSetFocus(BOOL fForeground) {
     return S_OK;
 }
 
+bool TextService::isPasswordField(ITfContext* context) {
+    if (!context || isComposing()) {
+        return false;
+    }
+    bool password = false;
+    auto session = ComPtr<EditSession>::make(
+        context,
+        [&](EditSession* session, TfEditCookie cookie) {
+            TF_SELECTION selection = {};
+            ULONG fetched = 0;
+            if (context->GetSelection(cookie, TF_DEFAULT_SELECTION, 1, &selection, &fetched) != S_OK || fetched == 0) {
+                return;
+            }
+            ITfRange* selectionRange = selection.range;
+            auto range = ComPtr<ITfRange>::takeover(std::move(selectionRange));
+            ComPtr<ITfReadOnlyProperty> property;
+            if (context->GetAppProperty(GUID_PROP_INPUTSCOPE, &property) != S_OK || !property) {
+                return;
+            }
+            VARIANT value;
+            ::VariantInit(&value);
+            if (property->GetValue(cookie, range, &value) == S_OK && value.vt == VT_UNKNOWN && value.punkVal) {
+                auto inputScope = ComPtr<ITfInputScope>::queryFrom(value.punkVal);
+                if (inputScope) {
+                    InputScope* scopes = nullptr;
+                    UINT count = 0;
+                    if (inputScope->GetInputScopes(&scopes, &count) == S_OK && scopes) {
+                        for (UINT i = 0; i < count; ++i) {
+                            if (scopes[i] == IS_PASSWORD || scopes[i] == IS_NUMERIC_PASSWORD ||
+                                scopes[i] == IS_NUMERIC_PIN || scopes[i] == IS_ALPHANUMERIC_PIN) {
+                                password = true;
+                            }
+                        }
+                        ::CoTaskMemFree(scopes);
+                    }
+                }
+            }
+            ::VariantClear(&value);
+        }
+    );
+    HRESULT sessionResult;
+    if (context->RequestEditSession(clientId_, session, TF_ES_SYNC | TF_ES_READ, &sessionResult) != S_OK) {
+        return false;
+    }
+    return password;
+}
+
+bool TextService::shouldPassKeysThrough(ITfContext* context) {
+    return isKeyboardDisabled(context) || !isKeyboardOpened() || isPasswordField(context);
+}
+
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) {
-    if (isKeyboardDisabled(pContext) || !isKeyboardOpened()) {
+    if (shouldPassKeysThrough(pContext)) {
         *pfEaten = FALSE;
     }
     else {
@@ -757,7 +809,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext *pContext, WPARAM wParam, LPA
 STDMETHODIMP TextService::OnKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) {
     // Some applications do not trigger OnTestKeyDown()
     // So we need to test it again here! Windows TSF sucks!
-    if (isKeyboardDisabled(pContext) || !isKeyboardOpened()) {
+    if (shouldPassKeysThrough(pContext)) {
         *pfEaten = FALSE;
     }
     else {
@@ -785,7 +837,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM 
 }
 
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) {
-    if (isKeyboardDisabled(pContext) || !isKeyboardOpened()) {
+    if (shouldPassKeysThrough(pContext)) {
         *pfEaten = FALSE;
     }
     else {
@@ -798,7 +850,7 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext *pContext, WPARAM wParam, LPARA
 STDMETHODIMP TextService::OnKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) {
     // Some applications do not trigger OnTestKeyDown()
     // So we need to test it again here! Windows TSF sucks!
-    if (isKeyboardDisabled(pContext) || !isKeyboardOpened()) {
+    if (shouldPassKeysThrough(pContext)) {
         *pfEaten = FALSE;
     }
     else {

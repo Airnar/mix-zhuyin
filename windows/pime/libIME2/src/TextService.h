@@ -127,6 +127,14 @@ public:
 
     // is keyboard disabled for the context (nullptr means current context)
     bool isKeyboardDisabled(ITfContext* context = nullptr) const;
+
+    // Whether the text where the cursor is wants a password or PIN (its input
+    // scope says so). Keys there go to the app untouched, so only plain
+    // letters and digits are typed. Checked only when not composing.
+    bool isPasswordField(ITfContext* context);
+
+    // Whether keys should bypass the input method in this context.
+    bool shouldPassKeysThrough(ITfContext* context);
     
     // is keyboard opened for the whole thread
     bool isKeyboardOpened() const;
