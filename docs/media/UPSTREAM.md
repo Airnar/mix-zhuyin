@@ -47,6 +47,9 @@ commits carry the changes. In short:
   `TF_ATTR_TARGET_CONVERTED`); `TextService::setCompositionTarget` applies it
   to a range, and the client reads the range from a new `compositionHighlight`
   field (`[start, end)` in code points, like `compositionCursor`).
+- **Password fields**: `TextService::shouldPassKeysThrough` also passes keys
+  through when the input scope at the cursor is a password or PIN
+  (`isPasswordField`, checked only while not composing).
 - **Fix**: `ImeModule::unregisterServer` registered the systray category
   instead of unregistering it, leaving the TIP key behind after uninstall.
 - **Config tool**: `onConfigure` starts the config tool hidden (it is
