@@ -41,6 +41,9 @@ describe("public API documentation", () => {
     const source = readSource("McBopomofo/InputController.ts");
 
     expectDocumented(source, "get readableLayoutKeys(): Map<string, string> {");
+    expectDocumented(source, "public setMixedDropStrayKeys(flag: boolean): void {");
+    expectDocumented(source, "public setSnippets(snippets: string[]): void {");
+    expectDocumented(source, "public readingOf(text: string): string | undefined {");
     expectDocumented(
       source,
       "public setExcludedPhrases(input: Map<string, string[]> | string): void {",

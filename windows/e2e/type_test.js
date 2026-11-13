@@ -88,7 +88,7 @@ function send(request) {
 }
 
 // Windows virtual-key codes for the characters we type.
-const OEM = { ";": 186, "=": 187, ",": 188, "-": 189, ".": 190, "/": 191, "'": 222 };
+const OEM = { ";": 186, "=": 187, ",": 188, "-": 189, ".": 190, "/": 191, "`": 192, "'": 222 };
 // Arrow keys and Esc, written as symbols in key sequences.
 const NAMED = { "←": 37, "↑": 38, "→": 39, "↓": 40, "⎋": 27 };
 function keyFor(ch) {
@@ -232,6 +232,37 @@ async function main() {
     if (!ok3) failures++;
     console.log(`${ok3 ? "PASS" : "FAIL"}  Esc closes the window and drops the target`);
     await typeKeys("⎋");
+  }
+
+  // Text snippets: ` and Space list them, a candidate key commits one. Only
+  // runs when the user has no snippets of their own, and puts the file back.
+  {
+    const file = path.join(process.env.APPDATA || "", "MixZhuyin", "snippets.txt");
+    let before;
+    try {
+      before = fs.readFileSync(file, "utf8");
+    } catch {
+      before = undefined;
+    }
+    const hasOwn = (before || "").split(/\r?\n/).some((l) => l.trim() && !l.trim().startsWith("#"));
+    if (hasOwn) {
+      console.log("SKIP  snippets (the user has their own)");
+    } else {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "台北市信義區市府路1號\n謝謝您\n");
+      // The backend reloads the file when it changes.
+      await new Promise((r) => setTimeout(r, 1500));
+      const { committed } = await typeKeys("` 2");
+      const ok = committed === "謝謝您";
+      if (!ok) failures++;
+      console.log(`${ok ? "PASS" : "FAIL"}  "\` 2" -> ${JSON.stringify(committed)}${ok ? "" : ' (expected "謝謝您")'}`);
+      await typeKeys("\n");
+      if (before === undefined) {
+        fs.unlinkSync(file);
+      } else {
+        fs.writeFileSync(file, before);
+      }
+    }
   }
 
   console.log(failures ? `${failures} failed` : `all passed${usePipe ? " (through the launcher)" : ""}`);

@@ -15,12 +15,13 @@ import path from "path";
 
 import { localDataDir, userDataDir } from "./pime_paths";
 import { defaultSettings } from "./pime_settings";
+import { kSnippetsTemplate } from "./pime_snippets";
 
 /** The cookie that carries the token. */
 export const kCookieName = "mixzhuyin_config_token";
 
 /** Pages the launcher may open. */
-export const kPages = ["options", "user_phrases", "help"];
+export const kPages = ["options", "user_phrases", "snippets", "help"];
 
 /** The server quits after this long without a request. */
 export const kIdleTimeoutMs = 120 * 1000;
@@ -29,7 +30,10 @@ export const kIdleTimeoutMs = 120 * 1000;
 export interface ConfigHandlerOptions {
   /** The folder with the pages (output/pime). */
   staticDir: string;
-  /** The user data folder (config.json, data.txt, exclude-phrases.txt). */
+  /**
+   * The user data folder (config.json, data.txt, exclude-phrases.txt,
+   * snippets.txt).
+   */
   configDir: string;
   /** The login token. */
   token: string;
@@ -116,12 +120,13 @@ export const createConfigHandler = (
   const configFile = path.join(configDir, "config.json");
   const userPhrasesFile = path.join(configDir, "data.txt");
   const excludedPhrasesFile = path.join(configDir, "exclude-phrases.txt");
+  const snippetsFile = path.join(configDir, "snippets.txt");
   const staticRoot = path.resolve(staticDir) + path.sep;
 
-  const ensureFile = (file: string): void => {
+  const ensureFile = (file: string, template = ""): void => {
     fs.mkdirSync(configDir, { recursive: true });
     if (!fs.existsSync(file)) {
-      fs.writeFileSync(file, "");
+      fs.writeFileSync(file, template);
     }
   };
 
@@ -198,6 +203,9 @@ export const createConfigHandler = (
       "POST /user_phrases",
       "GET /excluded_phrases",
       "POST /excluded_phrases",
+      "GET /snippets",
+      "POST /snippets",
+      "GET /open_snippets",
     ];
     if (!known.includes(route)) {
       send(res, 404, '{"return":false}');
@@ -264,6 +272,24 @@ export const createConfigHandler = (
           fs.mkdirSync(configDir, { recursive: true });
           fs.writeFileSync(excludedPhrasesFile, await readBody(req));
           sendJson(res, { return: true });
+          return;
+        case "GET /snippets":
+          send(
+            res,
+            200,
+            fs.existsSync(snippetsFile) ? readText(snippetsFile) : kSnippetsTemplate,
+            "text/plain; charset=utf-8",
+          );
+          return;
+        case "POST /snippets":
+          fs.mkdirSync(configDir, { recursive: true });
+          fs.writeFileSync(snippetsFile, await readBody(req));
+          sendJson(res, { return: true });
+          return;
+        case "GET /open_snippets":
+          ensureFile(snippetsFile, kSnippetsTemplate);
+          openPath(snippetsFile);
+          sendJson(res, { return: true, path: configDir });
           return;
       }
     } catch (e) {

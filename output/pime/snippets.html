@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="utf-8">
+    <title>混打注音快捷文字本</title>
+    <link rel="icon" type="image/png" href="images/icon16.png">
+    <link rel="stylesheet" href="css/settings.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="js/keep_alive.js"></script>
+    <script src="js/snippets.js"></script>
+</head>
+
+<body>
+    <header class="app-header">
+        <img src="images/icon48.png" alt="" width="40" height="40">
+        <div class="app-title">
+            <h1>快捷文字本</h1>
+            <p>打 <kbd>`</kbd> 再按空白鍵叫出清單，用數字鍵或 Enter 選。</p>
+        </div>
+        <span id="save_status" class="save-status" role="status" aria-live="polite"></span>
+    </header>
+
+    <main>
+        <section class="card" aria-labelledby="snippets_title">
+            <h2 id="snippets_title">常用文字</h2>
+            <p class="card-desc">一行一段。要換行請寫 <code>\n</code>，以 <code>#</code> 開頭的行不會出現在清單裡。</p>
+            <textarea id="snippets" class="editor" spellcheck="false" aria-labelledby="snippets_title"
+                placeholder="台北市信義區市府路1號&#10;謝謝您的來信！\n祝 順心"></textarea>
+            <div class="actions">
+                <button type="button" id="open">用編輯器打開</button>
+                <button type="button" id="reload">重新載入</button>
+                <button type="button" id="save" class="primary">儲存</button>
+            </div>
+        </section>
+    </main>
+</body>
+
+</html>

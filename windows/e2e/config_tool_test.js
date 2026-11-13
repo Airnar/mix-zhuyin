@@ -54,6 +54,10 @@ async function main() {
   const config = await request({ port, method: "GET", path: "/config", headers: { Cookie: cookie } });
   const settings = JSON.parse(config.body);
   if (settings.candidate_font_name !== "Microsoft JhengHei UI") throw new Error(`config: ${config.body}`);
+  const snippetsPage = await request({ port, method: "GET", path: "/snippets.html" });
+  if (snippetsPage.status !== 200 || !snippetsPage.body.includes("快捷文字本")) throw new Error("snippets.html");
+  const snippets = await request({ port, method: "GET", path: "/snippets", headers: { Cookie: cookie } });
+  if (snippets.status !== 200 || !snippets.body.startsWith("#")) throw new Error(`snippets: ${snippets.body}`);
   console.log("PASS  settings page server answers on port " + port);
 }
 

@@ -16,9 +16,16 @@ import { InputController } from "./McBopomofo/InputController";
 import { Empty, Inputting, NotEmpty } from "./McBopomofo/InputState";
 import { InputUI } from "./McBopomofo/InputUI";
 import { openWithShell } from "./pime_config_tool";
+import {
+  messageBoxScript,
+  openFileDialogScript,
+  runPowerShell,
+} from "./pime_dialogs";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
 import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
+import { importPhraseFile, importSummary } from "./pime_phrase_import";
 import { defaultSettings, Settings } from "./pime_settings";
+import { kSnippetsTemplate, parseSnippets } from "./pime_snippets";
 import { candidateUi, compositionHighlight } from "./pime_ui";
 
 
@@ -71,6 +78,8 @@ enum PimeMcBopomofoCommand {
   OpenMcBopomofoUserDataFolder = 12,
   ReloadUserPhrase = 13,
   ToggleBpmfFontAnnotationSupport = 14,
+  EditSnippets = 15,
+  ImportMicrosoftPhrases = 16,
 }
 
 /** Wraps InputController and required states.  */
@@ -145,6 +154,7 @@ class PimeMcBopomofo {
     });
 
     this.loadUserPhrases();
+    this.loadSnippets();
     this.loadMixedLearning();
   }
 
@@ -185,6 +195,53 @@ class PimeMcBopomofo {
     this.mcBopomofoUserDataPath,
     "exclude-phrases.txt",
   );
+
+  /** The path to the text snippets file (快捷文字本). */
+  readonly snippetsPath: string = path.join(
+    this.mcBopomofoUserDataPath,
+    "snippets.txt",
+  );
+
+  /** Loads the text snippets. */
+  public loadSnippets(): void {
+    fs.readFile(this.snippetsPath, (err, data) => {
+      this.inputController.setSnippets(
+        err ? [] : parseSnippets(data.toString("utf8")),
+      );
+    });
+  }
+
+  /**
+   * Asks for a file exported from Microsoft Bopomofo and adds its phrases to
+   * the user phrases, then says what it did.
+   */
+  public importMicrosoftPhrases(): void {
+    runPowerShell(
+      openFileDialogScript(
+        "匯入微軟注音的使用者詞彙",
+        "微軟注音詞彙檔 (*.txt;*.dat;*.lex)|*.txt;*.dat;*.lex|所有檔案 (*.*)|*.*",
+      ),
+    )
+      .then((file) => {
+        if (!file) {
+          return undefined;
+        }
+        let message: string;
+        try {
+          const result = importPhraseFile(file, this.userPhrasesPath, (p) =>
+            this.inputController.readingOf(p),
+          );
+          if (result.added > 0) {
+            this.loadUserPhrases();
+          }
+          message = importSummary(result);
+        } catch (e) {
+          message = "無法讀取這個檔案：" + e;
+        }
+        return runPowerShell(messageBoxScript("混打注音", message));
+      })
+      .catch((e) => console.error(e));
+  }
 
   /** The path to the user settings file. */
   readonly userSettingsPath: string = path.join(
@@ -606,7 +663,7 @@ class PimeMcBopomofo {
   /**
    * Opens a settings page with config_tool.js, run by the same Node.js as the
    * input method, so no Python is needed.
-   * @param page "options", "user_phrases" or "help".
+   * @param page "options", "user_phrases", "snippets" or "help".
    */
   public openConfigTool(page: string): void {
     const script = path.join(__dirname, "config_tool.js");
@@ -642,6 +699,10 @@ class PimeMcBopomofo {
         "# 一個詞彙一行，格式為：\n# 詞彙 注音\n# 例如：\n# 小麥注音 ㄒㄧㄠˇ-ㄇㄞˋ-ㄓㄨˋ-ㄧㄣ\n",
       );
       console.log("Created empty user phrase file at " + excludedPhrasesUrl);
+    }
+
+    if (!fs.existsSync(pimeMcBopomofo.snippetsPath)) {
+      fs.writeFileSync(pimeMcBopomofo.snippetsPath, kSnippetsTemplate);
     }
   }
 
@@ -687,6 +748,14 @@ class PimeMcBopomofo {
           this.createUserPhrasesIfNotExists();
           this.openConfigTool("user_phrases");
         }
+        break;
+      case PimeMcBopomofoCommand.EditSnippets:
+        this.createUserPhrasesIfNotExists();
+        this.openConfigTool("snippets");
+        break;
+      case PimeMcBopomofoCommand.ImportMicrosoftPhrases:
+        this.createUserPhrasesIfNotExists();
+        this.importMicrosoftPhrases();
         break;
       case PimeMcBopomofoCommand.OpenUserPhrase:
         {
@@ -782,6 +851,12 @@ try {
   fs.watch(pimeMcBopomofo.excludedPhrasesPath, (event, filename) => {
     if (filename) {
       pimeMcBopomofo.loadUserPhrases();
+    }
+  });
+
+  fs.watch(pimeMcBopomofo.snippetsPath, (event, filename) => {
+    if (filename) {
+      pimeMcBopomofo.loadSnippets();
     }
   });
 } catch (e) {
@@ -1169,6 +1244,14 @@ module.exports = {
         {
           text: "編輯使用者詞庫 (&U)",
           id: PimeMcBopomofoCommand.EditUserPhrase,
+        },
+        {
+          text: "匯入微軟注音詞彙…",
+          id: PimeMcBopomofoCommand.ImportMicrosoftPhrases,
+        },
+        {
+          text: "編輯快捷文字本 (&S)",
+          id: PimeMcBopomofoCommand.EditSnippets,
         },
         {
           text: "用編輯器打開使用者詞庫",

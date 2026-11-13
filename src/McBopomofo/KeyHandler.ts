@@ -134,6 +134,17 @@ export class KeyHandlerSettings {
 
 /** Prefix of the readings of candidates in mixed mode. */
 const kMixedCandidatePrefix = "_mix_";
+const kSnippetCandidatePrefix = "_snippet_";
+/** How many characters of a snippet the candidate window shows. */
+const kSnippetLabelLength = 24;
+
+/** A snippet as one short line for the candidate window. */
+function snippetLabel(text: string): string {
+  const line = Array.from(text.replace(/\r?\n/g, "⏎"));
+  return line.length > kSnippetLabelLength
+    ? line.slice(0, kSnippetLabelLength).join("") + "…"
+    : line.join("");
+}
 
 let sharedEnglishModel: EnglishModel | undefined;
 function getSharedEnglishModel(): EnglishModel {
@@ -241,6 +252,16 @@ export class KeyHandler {
   }
   public set mixedAutoSpace(flag: boolean) {
     this.mixedAutoSpace_ = flag;
+  }
+
+  private snippets_: string[] = [];
+
+  /** Text snippets (快捷文字本), listed by ` and Space in mixed mode. */
+  public get snippets(): string[] {
+    return this.snippets_;
+  }
+  public set snippets(list: string[]) {
+    this.snippets_ = list.slice();
   }
 
   private mixedComposer_: MixedComposer | undefined;
@@ -358,6 +379,22 @@ export class KeyHandler {
           // Keep the space so auto spacing knows what came before.
           c.precedingCharacter += " ";
           return false;
+        }
+        if (c.raw === kPunctuationListKey && this.snippets_.length > 0) {
+          const view = c.view();
+          const candidates = this.snippets_.map(
+            (text, i) =>
+              new Candidate(kSnippetCandidatePrefix + i, text, snippetLabel(text))
+          );
+          stateCallback(
+            new ChoosingCandidate(
+              view.text,
+              view.cursorIndex,
+              candidates,
+              view.cursorIndex
+            )
+          );
+          return true;
         }
         c.insert(" ");
         emit();
@@ -1187,6 +1224,16 @@ export class KeyHandler {
     originalCursorIndex: number,
     stateCallback: (state: InputState) => void
   ): void {
+    if (
+      this.mixedMode_ &&
+      candidate.reading.startsWith(kSnippetCandidatePrefix)
+    ) {
+      const c = this.mixedComposer;
+      c.clear();
+      c.precedingCharacter = (c.precedingCharacter + candidate.value).slice(-8);
+      stateCallback(new Committing(candidate.value));
+      return;
+    }
     if (this.mixedMode_ && candidate.reading.startsWith(kMixedCandidatePrefix)) {
       const index = parseInt(
         candidate.reading.substring(kMixedCandidatePrefix.length),

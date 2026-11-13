@@ -227,6 +227,7 @@ export class InputController {
     const onError = this.onError_;
     const settings = this.keyHandler_.exportSettings();
     const dropStrayKeys = this.keyHandler_.mixedDropStrayKeys;
+    const snippets = this.keyHandler_.snippets;
     const mixedLearning = this.keyHandler_.mixedComposer.exportLearning();
 
     const macroConverter = this.lm_.getMacroConverter();
@@ -253,6 +254,7 @@ export class InputController {
     this.keyHandler_.traditionalMode = flag;
     this.keyHandler_.restoreSettings(settings);
     this.keyHandler_.mixedDropStrayKeys = dropStrayKeys;
+    this.keyHandler_.snippets = snippets;
     this.keyHandler_.mixedComposer.importLearning(mixedLearning);
     this.onError_ = onError;
   }
@@ -605,6 +607,53 @@ export class InputController {
    */
   public setMixedDropStrayKeys(flag: boolean): void {
     this.keyHandler_.mixedDropStrayKeys = flag;
+  }
+
+  /**
+   * Looks up how a phrase reads, matching the longest dictionary words first.
+   * Used to give imported phrases a reading.
+   * @param text The phrase.
+   * @returns Syllables joined by "-", or undefined if part of the text is not
+   *   in the dictionary.
+   */
+  public readingOf(text: string): string | undefined {
+    const chars = Array.from(text);
+    if (chars.length === 0) {
+      return undefined;
+    }
+    const readings: string[] = [];
+    let i = 0;
+    while (i < chars.length) {
+      let found = false;
+      for (let length = Math.min(6, chars.length - i); length > 0; length--) {
+        const reading = this.mcBopomofoLm_.getReading(
+          chars.slice(i, i + length).join("")
+        );
+        if (
+          reading !== undefined &&
+          !reading.startsWith("_") &&
+          reading.split("-").length === length
+        ) {
+          readings.push(reading);
+          i += length;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return undefined;
+      }
+    }
+    return readings.join("-");
+  }
+
+  /**
+   * Sets the text snippets (快捷文字本). In mixed mode, ` and then Space
+   * lists them, and choosing one commits it.
+   * @param snippets The snippets, in the order to list them.
+   */
+  public setSnippets(snippets: string[]): void {
+    this.keyHandler_.snippets = snippets;
   }
 
   /**

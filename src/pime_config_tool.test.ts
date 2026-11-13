@@ -4,8 +4,9 @@ import { AddressInfo } from "net";
 import os from "os";
 import path from "path";
 
-import { createConfigHandler, launchPageHtml } from "./pime_config_tool";
+import { createConfigHandler, kPages, launchPageHtml } from "./pime_config_tool";
 import { defaultSettings } from "./pime_settings";
+import { kSnippetsTemplate } from "./pime_snippets";
 
 interface Reply {
   status: number;
@@ -165,6 +166,26 @@ describe("settings page server", () => {
     expect(
       fs.readFileSync(path.join(configDir, "exclude-phrases.txt"), "utf8"),
     ).toBe("胡大 ㄏㄨˊ-ㄉㄚˋ\n");
+  });
+
+  test("reads and writes the snippets, starting from the template", async () => {
+    expect((await request("GET", "/snippets", undefined, cookie)).body).toBe(
+      kSnippetsTemplate,
+    );
+    await request("POST", "/snippets", "台北市信義區市府路1號\n", cookie);
+    expect(fs.readFileSync(path.join(configDir, "snippets.txt"), "utf8")).toBe(
+      "台北市信義區市府路1號\n",
+    );
+    expect((await request("GET", "/snippets", undefined, cookie)).body).toBe(
+      "台北市信義區市府路1號\n",
+    );
+    await request("GET", "/open_snippets", undefined, cookie);
+    expect(opened).toEqual([path.join(configDir, "snippets.txt")]);
+  });
+
+  test("lets the snippets page log in", async () => {
+    expect(kPages).toContain("snippets");
+    expect((await request("GET", "/snippets")).status).toBe(403);
   });
 
   test("opens the data folder and phrase files", async () => {
