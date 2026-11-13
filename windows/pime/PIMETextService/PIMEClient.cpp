@@ -804,7 +804,7 @@ wstring Client::getPipeName(const wchar_t* baseName) {
 	}
 
 	pipeName += username.get();
-	pipeName += L"\\PIME\\";
+	pipeName += L"\\MixZhuyin\\";
 	pipeName += baseName;
 	return pipeName;
 }

@@ -23,6 +23,7 @@
 #include <windows.h>
 #include "window.h"
 #include "TextService.h"
+#include "ImeTheme.h"
 
 namespace Ime {
 
@@ -42,6 +43,11 @@ public:
     virtual void recalculateSize();
 
 protected:
+    // Asks DWM for rounded corners once the window exists (Windows 11).
+    void initFrame();
+    // Fills the background and, without DWM corners, draws a 1px border.
+    void paintFrame(HDC dc, const RECT& rc, const ImeTheme& theme);
+
     void onLButtonDown(WPARAM wp, LPARAM lp);
     void onLButtonUp(WPARAM wp, LPARAM lp);
     void onMouseMove(WPARAM wp, LPARAM lp);
@@ -51,6 +57,7 @@ protected:
     POINTS oldPos;
     HFONT font_;
     int margin_;
+    bool dwmFrame_;
 };
 
 }

@@ -22,7 +22,8 @@
 namespace Ime {
 
 ImeWindow::ImeWindow(TextService* service):
-    textService_(service) {
+    textService_(service),
+    dwmFrame_(false) {
 
     if(service->isImmersive()) { // windows 8 app mode
         margin_ = 10;
@@ -42,6 +43,26 @@ ImeWindow::ImeWindow(TextService* service):
 }
 
 ImeWindow::~ImeWindow(void) {
+}
+
+void ImeWindow::initFrame() {
+    dwmFrame_ = applyDwmFrame(hwnd_, currentImeTheme());
+}
+
+void ImeWindow::paintFrame(HDC dc, const RECT& rc, const ImeTheme& theme) {
+    RECT bg = rc;
+    HBRUSH background = ::CreateSolidBrush(theme.background);
+    ::FillRect(dc, &bg, background);
+    ::DeleteObject(background);
+    if (dwmFrame_) {
+        // Keeps the DWM border in step with a light/dark switch.
+        applyDwmFrame(hwnd_, theme);
+    }
+    else {
+        HBRUSH border = ::CreateSolidBrush(theme.border);
+        ::FrameRect(dc, &bg, border);
+        ::DeleteObject(border);
+    }
 }
 
 void ImeWindow::onLButtonDown(WPARAM wp, LPARAM lp) {

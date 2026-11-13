@@ -41,9 +41,13 @@ target_link_libraries(PIMETextService
     libIME2_static
 )
 
+# Ship as MixZhuyinTextService.dll so it never shares a module name with
+# PIME's own PIMETextService.dll in the same process.
+set_target_properties(PIMETextService PROPERTIES OUTPUT_NAME "MixZhuyinTextService")
+
 if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "ARM64")
     # Directly build the native ARM64 implementation as PIMETextService_arm64.dll
-    set_target_properties(PIMETextService PROPERTIES OUTPUT_NAME "PIMETextService_arm64")
+    set_target_properties(PIMETextService PROPERTIES OUTPUT_NAME "MixZhuyinTextService_arm64")
 
     # Link the ARM64X forwarder DLL directly as PIMETextService.dll
     add_custom_command(
@@ -51,7 +55,7 @@ if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "ARM64")
         COMMAND "${CMAKE_LINKER}" /nologo /dll /noentry /nodefaultlib /machine:arm64x
                 /defArm64Native:${CMAKE_CURRENT_SOURCE_DIR}/PIMETextService_arm64x_arm64.def
                 /def:${CMAKE_CURRENT_SOURCE_DIR}/PIMETextService_arm64x_x64.def
-                /out:$<TARGET_FILE_DIR:PIMETextService>/PIMETextService.dll
+                /out:$<TARGET_FILE_DIR:PIMETextService>/MixZhuyinTextService.dll
         COMMENT "Linking ARM64X forwarder DLL"
     )
 endif()

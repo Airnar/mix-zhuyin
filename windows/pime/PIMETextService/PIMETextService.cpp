@@ -53,6 +53,10 @@ TextService::TextService(ImeModule* module):
 	GetObject(font_, sizeof(lf), &lf);
 	lf.lfHeight = candFontHeight(); // FIXME: make this configurable
 	lf.lfWeight = FW_NORMAL;
+	lf.lfQuality = CLEARTYPE_QUALITY;
+	// MixZhuyin: Taiwan glyphs until the backend picks a font.
+	wcsncpy(lf.lfFaceName, L"Microsoft JhengHei UI", LF_FACESIZE - 1);
+	lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
 	font_ = CreateFontIndirect(&lf);
 }
 
@@ -254,6 +258,7 @@ void TextService::updateCandidates(Ime::EditSession* session) {
 		GetObject(font_, sizeof(lf), &lf);
 		::DeleteObject(font_); // delete old font
 		lf.lfHeight = candFontHeight(); // apply the new size
+		lf.lfQuality = CLEARTYPE_QUALITY;
 		if (!candFontName_.empty()) { // apply new font name
 			wcsncpy(lf.lfFaceName, candFontName_.c_str(), LF_FACESIZE - 1);
 			lf.lfFaceName[LF_FACESIZE - 1] = L'\0';

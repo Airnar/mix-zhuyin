@@ -1,4 +1,4 @@
-LIBRARY PIMETextService.dll
+LIBRARY MixZhuyinTextService.dll
 
 EXPORTS
     DllGetClassObject               PRIVATE

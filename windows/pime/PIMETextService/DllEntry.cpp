@@ -189,5 +189,5 @@ STDAPI DllRegisterServer(void) {
 		wcscpy_s(modulePath + len - suffixLen, 5, L".dll");
 	}
 #endif
-	return module->registerServer(L"PIMETextService", langProfiles.data(), static_cast<int>(langProfiles.size()), modulePath);
+	return module->registerServer(L"MixZhuyin", langProfiles.data(), static_cast<int>(langProfiles.size()), modulePath);
 }

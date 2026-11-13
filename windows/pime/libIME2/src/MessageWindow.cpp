@@ -28,6 +28,7 @@ MessageWindow::MessageWindow(TextService* service, EditSession* session):
 
     HWND parent = service->compositionWindow(session);
     create(parent, WS_POPUP|WS_CLIPCHILDREN, WS_EX_TOOLWINDOW|WS_EX_TOPMOST);
+    initFrame();
 }
 
 MessageWindow::~MessageWindow(void) {
@@ -39,11 +40,13 @@ void MessageWindow::recalculateSize() {
     HDC dc = GetDC(hwnd_);
     HGDIOBJ old_font = SelectObject(dc, font_);
     GetTextExtentPointW(dc, text_.c_str(), text_.length(), &size);
+    int padX = scaleForDpi(dc, 10);
+    int padY = scaleForDpi(dc, 5);
     SelectObject(dc, old_font);
     ReleaseDC(hwnd_, dc);
 
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0,
-        size.cx + margin_ * 2, size.cy + margin_ * 2, SWP_NOACTIVATE|SWP_NOMOVE);
+        size.cx + padX * 2, size.cy + padY * 2, SWP_NOACTIVATE|SWP_NOMOVE);
 }
 
 void MessageWindow::setText(std::wstring text) {
@@ -73,37 +76,17 @@ LRESULT MessageWindow::wndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
 void MessageWindow::onPaint(PAINTSTRUCT& ps) {
     int len = text_.length();
-    RECT rc, textrc = {0};
+    RECT rc;
     GetClientRect(hwnd_, &rc);
 
-    // draw a flat black border in Windows 8 app immersive mode
-    // draw a 3d border in desktop mode
     HDC hDC = ps.hdc;
     HFONT oldFont = (HFONT)SelectObject(hDC, font_);
+    ImeTheme theme = currentImeTheme();
+    paintFrame(hDC, rc, theme);
 
     SetBkMode(hDC, TRANSPARENT);
-    if(isImmersive()) {
-        SetTextColor(hDC, GetSysColor(COLOR_WINDOWTEXT));
-        SetBkColor(hDC, GetSysColor(COLOR_WINDOW));
-        HPEN pen = ::CreatePen(PS_SOLID, 3, RGB(0, 0, 0));
-        HGDIOBJ oldPen = ::SelectObject(hDC, pen);
-        ::Rectangle(hDC, rc.left, rc.top, rc.right, rc.bottom);
-        ::SelectObject(hDC, oldPen);
-        ::DeleteObject(pen);
-    }
-    else {
-        SetTextColor(hDC, GetSysColor(COLOR_INFOTEXT));
-        SetBkColor(hDC, GetSysColor(COLOR_INFOBK));
-        // draw a 3d border in desktop mode
-        ::FillSolidRect(hDC, &rc, ::GetSysColor(COLOR_INFOBK));
-        ::Draw3DBorder(hDC, &rc, GetSysColor(COLOR_3DFACE), 0);
-    }
-
-    SIZE size;
-    GetTextExtentPoint32W(hDC, text_.c_str(), len, &size);
-    rc.top += (rc.bottom - size.cy)/2;
-    rc.left += (rc.right - size.cx)/2;
-    ExtTextOutW(hDC, rc.left, rc.top, 0, &textrc, text_.c_str(), len, NULL);
+    SetTextColor(hDC, theme.text);
+    DrawTextW(hDC, text_.c_str(), len, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
     SelectObject(hDC, oldFont);
 }

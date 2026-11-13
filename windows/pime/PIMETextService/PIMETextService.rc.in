@@ -72,13 +72,13 @@ BEGIN
     BEGIN
         BLOCK "040404b0"
         BEGIN
-            VALUE "CompanyName", "PIME"
-            VALUE "FileDescription", "PIME"
+            VALUE "CompanyName", "MixZhuyin"
+            VALUE "FileDescription", "MixZhuyin text service (based on PIME)"
             VALUE "FileVersion", "@PIME_VERSION_MAJOR@.@PIME_VERSION_MINOR@.@PIME_VERSION_PATCH@"
-            VALUE "InternalName", "PIMETextService.dll"
-            VALUE "LegalCopyright", "Copyright (C) 2013-2016 PIME developers"
-            VALUE "OriginalFilename", "PIMETextService.dll"
-            VALUE "ProductName", "PIME"
+            VALUE "InternalName", "MixZhuyinTextService.dll"
+            VALUE "LegalCopyright", "Copyright (C) 2013-2016 PIME developers, MixZhuyin developers"
+            VALUE "OriginalFilename", "MixZhuyinTextService.dll"
+            VALUE "ProductName", "MixZhuyin"
             VALUE "ProductVersion", "@PIME_VERSION_MAJOR@.@PIME_VERSION_MINOR@.@PIME_VERSION_PATCH@"
         END
     END

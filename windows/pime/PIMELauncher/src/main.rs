@@ -36,7 +36,7 @@ async fn run_watchdog(original_args: &[String]) {
 
     info!("Watchdog started. Monitoring worker...");
 
-    let event_name = get_per_session_name("PIMELauncher2_QuitEvent");
+    let event_name = get_per_session_name("MixZhuyinLauncher_QuitEvent");
     let (quit_tx, mut quit_rx) = tokio::sync::mpsc::channel::<()>(1);
     
     std::thread::spawn(move || {
@@ -99,7 +99,7 @@ fn signal_quit_event() {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{CreateEventW, SetEvent};
 
-    let event_name = get_per_session_name("PIMELauncher2_QuitEvent");
+    let event_name = get_per_session_name("MixZhuyinLauncher_QuitEvent");
     let mut name_utf16: Vec<u16> = event_name.encode_utf16().collect();
     name_utf16.push(0);
 
@@ -152,15 +152,15 @@ fn print_help() {
         }
     }
     println!(
-        r#"PIMELauncher - Background middleware for PIME text services
+        r#"MixZhuyinLauncher - Background middleware for the MixZhuyin text service (based on PIMELauncher)
 
 USAGE:
-    PIMELauncher.exe [OPTIONS]
+    MixZhuyinLauncher.exe [OPTIONS]
 
 OPTIONS:
     /console            Open a console window with live DEBUG logs
     /log-file <PATH>    Dump DEBUG logs to the specified file (or /log-file=<PATH>)
-    /quit               Gracefully terminate running PIMELauncher instance
+    /quit               Gracefully terminate the running MixZhuyinLauncher instance
     /help, /?           Print this help message
 "#
     );
@@ -243,7 +243,7 @@ async fn main() {
 
     // Ensure single instance (using a named mutex)
     // The Watchdog process (parent) holds this mutex.
-    let mutex_name = get_per_session_name("PIMELauncher2_WatchdogMutex");
+    let mutex_name = get_per_session_name("MixZhuyinLauncher_WatchdogMutex");
     let _mutex = if !args.is_worker {
         match create_single_instance_mutex(&mutex_name) {
             Ok(m) => Some(m),
@@ -311,7 +311,7 @@ fn setup_error_mode() {
 /// Core logic for the PIME Worker process.
 async fn run_worker() {
     let username = get_windows_username();
-    let pipe_name = format!(r"\\.\pipe\{}\PIME\Launcher", username);
+    let pipe_name = format!(r"\\.\pipe\{}\MixZhuyin\Launcher", username);
 
     info!("Starting PIMELauncher2 Worker on pipe: {}", pipe_name);
 

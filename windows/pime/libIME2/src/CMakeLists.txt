@@ -32,6 +32,8 @@ add_library(libIME2_static STATIC
     # GUI-related code
     DrawUtils.h
     DrawUtils.cpp
+    ImeTheme.h
+    ImeTheme.cpp
     Window.cpp
     Window.h
     ImeWindow.cpp
@@ -44,4 +46,5 @@ add_library(libIME2_static STATIC
 
 target_link_libraries(libIME2_static
     shlwapi.lib
+    dwmapi.lib
 )

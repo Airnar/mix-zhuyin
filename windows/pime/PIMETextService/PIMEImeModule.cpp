@@ -35,14 +35,15 @@ using json = nlohmann::json;
 namespace PIME {
 
 namespace {
-// CLSID of our Text service
-// {35F67E9D-A54D-4177-9697-8B0AB71A9E04}
+// CLSID of our Text service. MixZhuyin uses its own CLSID (not PIME's
+// {35F67E9D-A54D-4177-9697-8B0AB71A9E04}) so it can be installed next to PIME.
+// {A64DF4E9-E913-47D2-A89A-CF3134688E0D}
 const GUID g_textServiceClsid = 
-{ 0x35f67e9d, 0xa54d, 0x4177, { 0x96, 0x97, 0x8b, 0xa, 0xb7, 0x1a, 0x9e, 0x4 } };
+{ 0xa64df4e9, 0xe913, 0x47d2, { 0xa8, 0x9a, 0xcf, 0x31, 0x34, 0x68, 0x8e, 0x0d } };
 
-// {53BCC437-ED0E-4D7D-9B46-57CAB8A9F255}
+// {52A98687-0008-48BD-917F-DD4B0457DB2D}
 static const GUID g_inputDisplayAttributeGuid = 
-{ 0x53bcc437, 0xed0e, 0x4d7d, { 0x9b, 0x46, 0x57, 0xca, 0xb8, 0xa9, 0xf2, 0x55 } };
+{ 0x52a98687, 0x0008, 0x48bd, { 0x91, 0x7f, 0xdd, 0x4b, 0x04, 0x57, 0xdb, 0x2d } };
 
 static std::vector<Ime::ComPtr<Ime::DisplayAttributeInfo>> createDisplayAttrInfos() {
     auto inputAttrib = Ime::ComPtr<Ime::DisplayAttributeInfo>::make(g_inputDisplayAttributeGuid);
@@ -55,15 +56,12 @@ static std::vector<Ime::ComPtr<Ime::DisplayAttributeInfo>> createDisplayAttrInfo
 ImeModule::ImeModule(HMODULE module):
 	Ime::ImeModule(module, g_textServiceClsid, createDisplayAttrInfos()) {
 	wchar_t path[MAX_PATH];
-	HRESULT result;
-	// get the program data directory
-	// try C:\program files (x86) first
-	result = ::SHGetFolderPathW(NULL, CSIDL_PROGRAM_FILESX86, NULL, 0, path);
-	if(result != S_OK) // failed, fall back to C:\program files
-		result = ::SHGetFolderPathW(NULL, CSIDL_PROGRAM_FILES, NULL, 0, path);
-	if(result == S_OK) { // program files folder is found
+	// The program directory is the parent of the folder holding this DLL
+	// (<program dir>\x86, \x64 or \arm64), wherever the installer put it.
+	DWORD pathLen = ::GetModuleFileNameW(module, path, MAX_PATH);
+	if (pathLen > 0 && pathLen < MAX_PATH &&
+		::PathRemoveFileSpecW(path) && ::PathRemoveFileSpecW(path)) {
 		programDir_ = path;
-		programDir_ += L"\\PIME";
 
 		// load backend information
 		std::ifstream fp(programDir_ + L"\\backends.json", std::ifstream::binary);
@@ -175,12 +173,13 @@ bool ImeModule::onConfigure(HWND hwndParent, LANGID langid, REFGUID rguidProfile
 	}
 
 	if (!configCommand.empty()) { // command line is found
-		// execute the config tool
+		// execute the config tool. MixZhuyin's is node.exe running
+		// config_tool.js, which opens the browser itself: hide its console.
 		::ShellExecuteW(hwndParent, L"open", 
 			configCommand.c_str(),
 			configParams.empty() ? NULL : configParams.c_str(),
 			configDir.empty() ? NULL : configDir.c_str(),
-			SW_SHOWNORMAL);
+			SW_HIDE);
 	}
 	else {
 		// FIXME: this message should be localized.

@@ -22,7 +22,7 @@
 
 namespace Ime {
 
-static TCHAR g_imeWindowClassName[] = _T("LibImeWindow");
+static TCHAR g_imeWindowClassName[] = _T("MixZhuyinImeWindow");
 static HINSTANCE g_hinstance = NULL;
 
 static std::mutex g_hwndMapMutex;
@@ -90,7 +90,9 @@ bool Window::registerClass(HINSTANCE hinstance) {
 
     WNDCLASSEX wc;
     wc.cbSize         = sizeof(WNDCLASSEX);
-    wc.style          = CS_IME; // FIXME: is this needed?
+    // CS_DROPSHADOW gives the candidate and message windows a shadow; with
+    // DWM rounded corners on Windows 11 the shadow follows the corners.
+    wc.style          = CS_IME | CS_DROPSHADOW;
     wc.lpfnWndProc    = (WNDPROC)Window::_wndProc;
     wc.cbClsExtra     = 0;
     wc.cbWndExtra     = 0;

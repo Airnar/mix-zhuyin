@@ -30,7 +30,7 @@ namespace PIME {
 namespace {
 
 constexpr UINT WM_PIME_ASYNC_DONE = WM_USER + 0x4101;
-constexpr wchar_t kWindowClassName[] = L"PIME_AsyncConnector_MsgWnd";
+constexpr wchar_t kWindowClassName[] = L"MixZhuyin_AsyncConnector_MsgWnd";
 constexpr int kDefaultRpcTimeoutMs = 15000;
 constexpr size_t kMaxIpcMessageLength = 4 * 1024 * 1024; // 4 MB
 

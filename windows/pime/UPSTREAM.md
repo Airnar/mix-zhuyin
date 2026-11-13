@@ -23,5 +23,23 @@ with the rest of this repository.
 
 ## Changes from upstream
 
-See the git history of this directory; the first commit is the unmodified
-import.
+The first commit touching this directory is the unmodified import; later
+commits carry the changes. In short:
+
+- **Renamed so it coexists with PIME**: new text service CLSID
+  `{A64DF4E9-E913-47D2-A89A-CF3134688E0D}` and display attribute GUID
+  (`PIMEImeModule.cpp`), DLL output name `MixZhuyinTextService` (CMake,
+  `.def` files, version resource), launcher binary `MixZhuyinLauncher`,
+  named pipe `\\.\pipe\<user>\MixZhuyin\Launcher`, per-session event and
+  mutex names, window class names.
+- **Install folder**: the text service finds its folder from its own DLL
+  path instead of `Program Files (x86)\PIME`.
+- **Build**: `CMakeLists.txt` reads the version from MixZhuyin's
+  `output/pime/ime.json` and builds only libIME2 and the text service; the
+  launcher is built with cargo; upstream tests and googletest are left out.
+- **Look**: `libIME2/src/ImeTheme.*` (new) and changes to `CandidateWindow`,
+  `MessageWindow`, `ImeWindow` and `Window` draw the candidate and message
+  windows in Windows light/dark colors with rounded corners; the text service
+  creates its font with ClearType and Microsoft JhengHei UI.
+- **Config tool**: `onConfigure` starts the config tool hidden (it is
+  `node.exe config_tool.js`, which opens the browser itself).
