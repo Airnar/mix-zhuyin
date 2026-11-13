@@ -196,6 +196,14 @@ void Client::updateComposition(json& msg, Ime::EditSession* session, bool& endCo
 				textService_->startComposition(session->context());
 			}
 			textService_->setCompositionString(session, compositionString.c_str(), compositionString.length());
+			// MixZhuyin: mark the part the candidate window replaces.
+			const auto& highlightVal = msg["compositionHighlight"];
+			if (highlightVal.is_array() && highlightVal.size() == 2 &&
+				highlightVal[0].is_number_integer() && highlightVal[1].is_number_integer()) {
+				const int start = compositionCursorToUtf16Position(compositionString, highlightVal[0].get<int>());
+				const int end = compositionCursorToUtf16Position(compositionString, highlightVal[1].get<int>());
+				textService_->setCompositionTarget(session, start, end);
+			}
 		}
 		// FIXME: update the position of candidate and message window when the composition string is changed.
 		if (textService_->candidateWindow_ != nullptr) {

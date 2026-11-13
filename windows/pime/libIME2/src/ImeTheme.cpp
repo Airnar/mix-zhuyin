@@ -63,7 +63,7 @@ ImeTheme currentImeTheme() {
             RGB(72, 72, 72),    // border
             RGB(243, 243, 243), // text
             RGB(160, 160, 160), // selection keys
-            RGB(55, 69, 88),    // selected item
+            RGB(38, 74, 120),   // selected item
             RGB(255, 255, 255), // selected text
             RGB(106, 165, 239), // accent (MixZhuyin blue, lightened for dark)
             false,
@@ -74,7 +74,7 @@ ImeTheme currentImeTheme() {
         RGB(214, 214, 214), // border
         RGB(26, 26, 26),    // text
         RGB(112, 112, 112), // selection keys
-        RGB(221, 232, 246), // selected item
+        RGB(204, 224, 247), // selected item
         RGB(26, 26, 26),    // selected text
         RGB(27, 92, 171),   // accent (MixZhuyin blue)
         false,

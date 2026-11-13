@@ -381,7 +381,11 @@ void CandidateWindow::paintItem(HDC hDC, const ImeTheme& theme, int i) {
     // the selection key, right-aligned so keys of different widths line up
     RECT keyRect = {rect.left + padX_, rect.top, rect.left + padX_ + selKeyWidth_, rect.bottom};
     wchar_t selKey = i < (int)selKeys_.size() ? selKeys_[i] : L' ';
-    ::SetTextColor(hDC, selected && theme.highContrast ? theme.selectionText : theme.selKey);
+    COLORREF keyColor = theme.selKey;
+    if (selected) {
+        keyColor = theme.highContrast ? theme.selectionText : theme.accent;
+    }
+    ::SetTextColor(hDC, keyColor);
     ::DrawTextW(hDC, &selKey, 1, &keyRect, DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_NOPREFIX);
 
     // the candidate string

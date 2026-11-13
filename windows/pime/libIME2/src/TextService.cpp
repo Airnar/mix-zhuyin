@@ -292,6 +292,34 @@ void TextService::setCompositionString(EditSession* session, const wchar_t* str,
     }
 }
 
+void TextService::setCompositionTarget(EditSession* session, int start, int end) const {
+    const DisplayAttributeInfo* target = module_->targetAttrib();
+    ITfContext* context = session->context();
+    if (!target || !context || !composition_ || end <= start || start < 0) {
+        return;
+    }
+    TfEditCookie editCookie = session->editCookie();
+    ComPtr<ITfRange> compositionRange;
+    if (composition_->GetRange(&compositionRange) != S_OK) {
+        return;
+    }
+    ComPtr<ITfRange> targetRange;
+    if (compositionRange->Clone(&targetRange) != S_OK) {
+        return;
+    }
+    LONG moved = 0;
+    targetRange->Collapse(editCookie, TF_ANCHOR_START);
+    targetRange->ShiftEnd(editCookie, (LONG)end, &moved, NULL);
+    targetRange->ShiftStart(editCookie, (LONG)start, &moved, NULL);
+    ComPtr<ITfProperty> dispAttrProp;
+    if (context->GetProperty(GUID_PROP_ATTRIBUTE, &dispAttrProp) == S_OK) {
+        VARIANT val;
+        val.vt = VT_I4;
+        val.lVal = target->atom();
+        dispAttrProp->SetValue(editCookie, targetRange, &val);
+    }
+}
+
 // set cursor position in the composition area
 // 0 means the start pos of composition string
 void TextService::setCompositionCursor(EditSession* session, int pos) const {

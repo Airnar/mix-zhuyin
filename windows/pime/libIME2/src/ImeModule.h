@@ -89,6 +89,11 @@ public:
         return displayAttrInfos_.empty() ? nullptr : static_cast<DisplayAttributeInfo*>(displayAttrInfos_.front());
     }
 
+    // The second display attribute, if any: the target of a conversion.
+    const DisplayAttributeInfo* targetAttrib() const {
+        return displayAttrInfos_.size() < 2 ? nullptr : static_cast<DisplayAttributeInfo*>(displayAttrInfos_[1]);
+    }
+
     // COM-related stuff
 
     // IUnknown

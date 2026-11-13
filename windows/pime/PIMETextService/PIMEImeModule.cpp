@@ -45,10 +45,20 @@ const GUID g_textServiceClsid =
 static const GUID g_inputDisplayAttributeGuid = 
 { 0x52a98687, 0x0008, 0x48bd, { 0x91, 0x7f, 0xdd, 0x4b, 0x04, 0x57, 0xdb, 0x2d } };
 
+// The part of the composition the candidate window replaces.
+// {59D88439-8D0A-4746-8019-20E3CB9DB81F}
+static const GUID g_targetDisplayAttributeGuid =
+{ 0x59d88439, 0x8d0a, 0x4746, { 0x80, 0x19, 0x20, 0xe3, 0xcb, 0x9d, 0xb8, 0x1f } };
+
 static std::vector<Ime::ComPtr<Ime::DisplayAttributeInfo>> createDisplayAttrInfos() {
     auto inputAttrib = Ime::ComPtr<Ime::DisplayAttributeInfo>::make(g_inputDisplayAttributeGuid);
     inputAttrib->setLineStyle(TF_LS_DOT);
-	return {std::move(inputAttrib)};
+    // A thick solid underline, as Windows' own IMEs mark the target clause.
+    auto targetAttrib = Ime::ComPtr<Ime::DisplayAttributeInfo>::make(g_targetDisplayAttributeGuid);
+    targetAttrib->setLineStyle(TF_LS_SOLID);
+    targetAttrib->setLineBold(true);
+    targetAttrib->setAttrInfo(TF_ATTR_TARGET_CONVERTED);
+	return {std::move(inputAttrib), std::move(targetAttrib)};
 }
 
 }

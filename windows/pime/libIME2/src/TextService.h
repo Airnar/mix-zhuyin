@@ -142,6 +142,9 @@ public:
     std::wstring compositionString(EditSession* session) const;
     void setCompositionString(EditSession* session, const wchar_t* str, int len) const;
     void setCompositionCursor(EditSession* session, int pos) const;
+    // Marks [start, end) of the composition (UTF-16 offsets) with the target
+    // display attribute, e.g. the text the candidate window replaces.
+    void setCompositionTarget(EditSession* session, int start, int end) const;
 
     // compartment handling
     ComPtr<ITfCompartment> globalCompartment(const GUID& key) const;
