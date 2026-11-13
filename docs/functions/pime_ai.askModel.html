@@ -17,8 +17,9 @@
 <div class="tsd-signature tsd-anchor-link" id="askmodel"><span class="tsd-kind-call-signature">askModel</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">settings</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.AiSettings.html" class="tsd-signature-type tsd-kind-interface">AiSettings</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">messages</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.ChatMessage.html" class="tsd-signature-type tsd-kind-interface">ChatMessage</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">fetchImpl</span><span class="tsd-signature-symbol">:</span> <a href="../types/pime_ai.FetchLike.html" class="tsd-signature-type tsd-kind-type-alias">FetchLike</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">timeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">retryDelayMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#askmodel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Asks the model, in the API shape its settings say. If the service is busy
-(HTTP 429 or 503), asks once more after a short wait, within the same time
-limit.</p>
+(HTTP 429 or 503), asks once more after a short wait; if it refuses the
+request with <code>reasoning_effort</code> (HTTP 400), asks once more without it.
+Both tries share one time limit.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -41,7 +42,7 @@ limit.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></h4><p>The answer.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/1521c013b72fbde95d9756e8f1898804ccf9386a/src/pime_ai.ts#L331">work/mix-zhuyin/mix-zhuyin/src/pime_ai.ts:331</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/d9bd4652848e18a0d5407a7ae79bd687c8352df6/src/pime_ai.ts#L387">work/mix-zhuyin/mix-zhuyin/src/pime_ai.ts:387</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
