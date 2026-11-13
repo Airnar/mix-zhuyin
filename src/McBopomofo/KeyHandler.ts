@@ -277,7 +277,7 @@ export class KeyHandler {
       return evicted ? new Committing(evicted) : new EmptyIgnoringPrevious();
     }
     const view = c.view();
-    const tip = view.prediction ? "Tab → " + view.prediction : "";
+    const tip = view.prediction ? "Tab、→：" + view.prediction : "";
     return new Inputting(view.text, view.cursorIndex, tip, evicted);
   }
 
@@ -368,6 +368,12 @@ export class KeyHandler {
         if (c.isEmpty) {
           c.precedingCharacter = "";
           return false;
+        }
+        // Right at the end of the text accepts the English prediction, as
+        // Tab does.
+        if (key.name === KeyName.RIGHT && c.isAtEnd && c.acceptPrediction()) {
+          emit();
+          return true;
         }
         if (!c.moveFocus(key.name === KeyName.LEFT ? -1 : 1)) {
           errorCallback();

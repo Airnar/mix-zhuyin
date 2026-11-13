@@ -316,6 +316,11 @@ export class MixedComposer {
     this.update_();
   }
 
+  /** Whether the cursor is at the end of the text. */
+  get isAtEnd(): boolean {
+    return this.focus_ === null;
+  }
+
   /** Moves the cursor by units. Returns false if it cannot move. */
   moveFocus(delta: number): boolean {
     if (this.focusIndex_ < 0) {

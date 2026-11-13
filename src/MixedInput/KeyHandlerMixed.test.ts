@@ -155,6 +155,22 @@ describe("KeyHandler in mixed mode", () => {
     expect(s.composing).toBe("我開 meeting");
   });
 
+  test("Right at the end also accepts the prediction", () => {
+    const s = new Session(mixedHandler());
+    s.type("ji3d9 meet");
+    expect((s.state as Inputting).tooltip).toBe("Tab、→：meeting");
+    s.key(Key.namedKey(KeyName.RIGHT));
+    expect(s.composing).toBe("我開 meeting");
+  });
+
+  test("Right in the middle still moves the cursor", () => {
+    const s = new Session(mixedHandler());
+    s.type("ji3d9 meet");
+    s.key(Key.namedKey(KeyName.LEFT));
+    s.key(Key.namedKey(KeyName.RIGHT));
+    expect(s.composing).toBe("我開 meet");
+  });
+
   test("full-width punctuation follows Chinese", () => {
     const s = new Session(mixedHandler());
     s.type("su3cl3?");
