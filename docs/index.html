@@ -123,6 +123,10 @@
 <td>兩個注音之間多出來的鍵會自動刪掉（可在設定關閉）</td>
 </tr>
 <tr>
+<td><kbd>`</kbd> 再按空白鍵</td>
+<td>叫出快捷文字本（常用的地址、簽名等），用數字鍵或 Enter 選；在輸入法選單「編輯快捷文字本」新增</td>
+</tr>
+<tr>
 <td>數字鍵盤</td>
 <td>打出來的一定是數字</td>
 </tr>
@@ -130,6 +134,8 @@
 </table>
 <p>上排數字也是注音鍵。整串數字剛好拼成有聲調的注音、而且打在最後時（例如 103 = ㄅㄢˇ），會當成中文；後面接空白或其他字時（103 年）則當成數字。按 Shift 互換後送出，下次同樣的數字會照你上次的選擇。</p>
 <p>中文與英文、數字之間會自動加半形空白（可在設定關閉）。</p>
+<h3 id="從微軟注音搬過來" class="tsd-anchor-link">從微軟注音搬過來<a href="#從微軟注音搬過來" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>輸入法選單 →「匯入微軟注音詞彙…」，選微軟注音匯出的檔案：「使用者造詞工具」匯出的 <code>.txt</code>，或設定頁「使用者定義的片語」匯出的 <code>.dat</code>。詞會加進使用者詞庫；檔案裡沒有注音的詞，會用詞庫查出讀音（查不到的會略過，完成後會告訴你加了幾個、略過幾個）。</p>
 <h2 id="判斷準確度" class="tsd-anchor-link">判斷準確度<a href="#判斷準確度" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>測試集是 146 句純中文、純英文與中英混合句（<a href="media/sentences.json"><code>testdata/sentences.json</code></a>），在各鍵盤配置下打出來後檢查中英判斷：</p>
 <table>
@@ -191,6 +197,9 @@
 <li><a href="#整句選字（本機語言模型）"><span>整句選字（本機語言模型）</span></a></li>
 <li><a href="#安裝（windows）"><span>安裝（<wbr/>Windows）</span></a></li>
 <li><a href="#操作"><span>操作</span></a></li>
+<li>
+<ul>
+<li><a href="#從微軟注音搬過來"><span>從微軟注音搬過來</span></a></li></ul></li>
 <li><a href="#判斷準確度"><span>判斷準確度</span></a></li>
 <li><a href="#開發"><span>開發</span></a></li>
 <li><a href="#授權"><span>授權</span></a></li></ul></div></details></div>
