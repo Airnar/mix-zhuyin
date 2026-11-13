@@ -286,8 +286,7 @@ void TextService::updateCandidates(Ime::EditSession* session) {
 	RECT textRect;
 	// get the position of composition area from TSF
 	if (selectionRect(session, &textRect)) {
-		// FIXME: where should we put the candidate window?
-		candidateWindow_->move(textRect.left, textRect.bottom);
+		candidateWindow_->moveNearText(textRect);
 	}
 
 	if (validCandidateListElementId_) {
@@ -303,8 +302,7 @@ void TextService::updateCandidatesWindow(Ime::EditSession* session) {
         RECT textRect;
         // get the position of composition area from TSF
         if (selectionRect(session, &textRect)) {
-            // FIXME: where should we put the candidate window?
-            candidateWindow_->move(textRect.left, textRect.bottom);
+            candidateWindow_->moveNearText(textRect);
         }
     }
 }
@@ -360,15 +358,13 @@ void TextService::showMessage(Ime::EditSession* session, std::wstring message, i
 	messageWindow_->setFont(font_);
 	messageWindow_->setText(message);
 	
-	int x = 0, y = 0;
-	if(isComposing()) {
-		RECT rc;
-		if(selectionRect(session, &rc)) {
-			x = rc.left;
-			y = rc.bottom;
-		}
+	RECT rc;
+	if(isComposing() && selectionRect(session, &rc)) {
+		messageWindow_->moveNearText(rc);
 	}
-	messageWindow_->move(x, y);
+	else {
+		messageWindow_->move(0, 0);
+	}
 	messageWindow_->show();
 
 	messageTimerId_ = ::SetTimer(messageWindow_->hwnd(), 1, duration * 1000, (TIMERPROC)TextService::onMessageTimeout);
@@ -379,8 +375,7 @@ void TextService::updateMessageWindow(Ime::EditSession* session) {
         RECT textRect;
         // get the position of composition area from TSF
         if (selectionRect(session, &textRect)) {
-            // FIXME: where should we put the message window?
-            messageWindow_->move(textRect.left, textRect.bottom);
+            messageWindow_->moveNearText(textRect);
         }
     }
 }

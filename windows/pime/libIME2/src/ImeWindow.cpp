@@ -107,6 +107,23 @@ void ImeWindow::move(int x, int y) {
     ::MoveWindow(hwnd_, x, y, w, h, TRUE);
 }
 
+void ImeWindow::moveNearText(const RECT& textRect) {
+    HDC dc = ::GetDC(hwnd_);
+    int gap = scaleForDpi(dc, 4);
+    ::ReleaseDC(hwnd_, dc);
+    int w, h;
+    size(&w, &h);
+    int x = textRect.left;
+    int y = textRect.bottom + gap;
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    HMONITOR monitor = ::MonitorFromRect(&textRect, MONITOR_DEFAULTTONEAREST);
+    if (::GetMonitorInfo(monitor, &mi) && y + h > mi.rcWork.bottom) {
+        y = textRect.top - gap - h;
+    }
+    move(x, y); // still keeps the window on the screen
+}
+
 void ImeWindow::setFont(HFONT f) {
     if(font_)
         ::DeleteObject(font_);

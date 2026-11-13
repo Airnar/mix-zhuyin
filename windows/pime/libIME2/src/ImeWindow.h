@@ -35,6 +35,9 @@ public:
     ImeWindow(TextService* service);
     virtual ~ImeWindow(void);
     void move(int x, int y);
+    // Puts the window just below the text, or above it when there is no room
+    // below, leaving a small gap so it never covers the text.
+    void moveNearText(const RECT& textRect);
     bool isImmersive() {
         return textService_->isImmersive();
     }
