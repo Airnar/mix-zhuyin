@@ -38,7 +38,7 @@ if (-not (Test-Path (Join-Path $root "output\pime\index.js")) -or
 foreach ($arch in @(@{ Name = "x86"; Cmake = "Win32" }, @{ Name = "x64"; Cmake = "x64" }, @{ Name = "arm64"; Cmake = "ARM64" })) {
   $dir = Join-Path $work "cmake-$($arch.Name)"
   if ($Reuse -and (Test-Path "$dir\PIMETextService\Release\MixZhuyinTextService.dll")) { continue }
-  Invoke-Checked "Configure text service ($($arch.Name))" { cmake -S $pime -B $dir -A $arch.Cmake }
+  Invoke-Checked "Configure text service ($($arch.Name))" { cmake -S $pime -B $dir -A $arch.Cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 }
   Invoke-Checked "Build text service ($($arch.Name))" { cmake --build $dir --config Release --target PIMETextService }
 }
 
