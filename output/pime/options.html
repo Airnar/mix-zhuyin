@@ -252,11 +252,43 @@
             <h2 id="ai_title">AI 助手</h2>
             <div class="row">
                 <label class="row-text" for="ai_enabled">
-                    <span class="row-title">使用本機 AI</span>
-                    <span class="row-desc">組字時按 Ctrl+Enter 讓 AI 修正整句；框選查詢後按 Ctrl+E 解釋、Ctrl+R 改寫。需要先安裝 Ollama 並下載模型（例如 ollama pull qwen2.5:7b），文字不會送出這台電腦。</span>
+                    <span class="row-title">使用 AI 助手</span>
+                    <span class="row-desc">組字時按 Ctrl+Enter 讓 AI 修正整句；框選查詢後按 Ctrl+E 解釋、Ctrl+R 改寫。只有按這些鍵時才會問 AI，密碼欄永遠不會。</span>
                 </label>
                 <input type="checkbox" class="switch" name="ai_enabled" id="ai_enabled">
             </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">修正整句（Ctrl+Enter）</span>
+                </div>
+                <select id="ai_correct_source">
+                    <option value="local">本機 AI</option>
+                    <option value="cloud">雲端 AI</option>
+                </select>
+            </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">解釋（Ctrl+E）</span>
+                </div>
+                <select id="ai_explain_source">
+                    <option value="local">本機 AI</option>
+                    <option value="cloud">雲端 AI</option>
+                </select>
+            </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">改寫（Ctrl+R）</span>
+                </div>
+                <select id="ai_rewrite_source">
+                    <option value="local">本機 AI</option>
+                    <option value="cloud">雲端 AI</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="ai_local_title">
+            <h2 id="ai_local_title">本機 AI（Ollama）</h2>
+            <p class="card-desc">在這台電腦上跑，文字不會送出去，也不用額度。先安裝 Ollama 並下載模型，例如 ollama pull qwen2.5:7b。</p>
             <div class="row">
                 <label class="row-text" for="ai_model">
                     <span class="row-title">模型</span>
@@ -270,6 +302,54 @@
                     <span class="row-desc">OpenAI 相容的 API 位址，Ollama 預設是 http://localhost:11434/v1。</span>
                 </label>
                 <input type="text" class="text-input" id="ai_base_url" spellcheck="false" placeholder="http://localhost:11434/v1">
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="ai_cloud_title">
+            <h2 id="ai_cloud_title">雲端 AI（你自己的金鑰）</h2>
+            <p class="card-desc">用雲端的功能，會把那段文字送到你選的服務，費用由你的帳號支付。金鑰用 Windows 加密存在這台電腦，只有你的 Windows 帳號解得開。</p>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">服務</span>
+                </div>
+                <select id="ai_cloud_provider">
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="custom">自訂（OpenAI 相容）</option>
+                </select>
+            </div>
+            <div class="row">
+                <label class="row-text" for="ai_cloud_model">
+                    <span class="row-title">模型</span>
+                    <span class="row-desc">留空就用預設的模型。</span>
+                </label>
+                <input type="text" class="text-input" id="ai_cloud_model" spellcheck="false">
+            </div>
+            <div class="row" id="ai_cloud_base_url_row">
+                <label class="row-text" for="ai_cloud_base_url">
+                    <span class="row-title">服務位址</span>
+                    <span class="row-desc">OpenAI 相容的 API 位址，例如 https://example.com/v1。</span>
+                </label>
+                <input type="text" class="text-input" id="ai_cloud_base_url" spellcheck="false">
+            </div>
+            <div class="row" id="ai_cloud_workspace_row">
+                <label class="row-text" for="ai_cloud_workspace">
+                    <span class="row-title">Workspace ID（選填）</span>
+                    <span class="row-desc">金鑰沒有指定 workspace 時才需要，格式像 wrkspc_…。</span>
+                </label>
+                <input type="text" class="text-input" id="ai_cloud_workspace" spellcheck="false">
+            </div>
+            <div class="row">
+                <label class="row-text" for="ai_cloud_key">
+                    <span class="row-title">API 金鑰</span>
+                    <span class="row-desc" id="ai_cloud_key_status">未設定</span>
+                </label>
+                <div class="key-input">
+                    <input type="password" class="text-input" id="ai_cloud_key" autocomplete="off" spellcheck="false" placeholder="貼上金鑰">
+                    <button type="button" id="ai_cloud_key_save">儲存</button>
+                    <button type="button" id="ai_cloud_key_clear">清除</button>
+                </div>
             </div>
         </section>
 

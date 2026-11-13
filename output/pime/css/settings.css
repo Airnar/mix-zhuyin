@@ -183,6 +183,33 @@ select:hover {
   user-select: text;
 }
 
+.key-input {
+  display: flex;
+  gap: 6px;
+}
+
+.key-input .text-input {
+  width: 200px;
+}
+
+.key-input button {
+  padding: 5px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.key-input button:hover {
+  background: var(--hover);
+}
+
+.row[hidden] {
+  display: none;
+}
+
 .text-input:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;

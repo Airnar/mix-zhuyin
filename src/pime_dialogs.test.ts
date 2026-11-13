@@ -33,28 +33,38 @@ describe("PowerShell dialogs", () => {
     expect(args).toContain("-NoProfile");
   });
 
-  test("runs powershell.exe hidden and trims what it prints", async () => {
-    const execFile = child_process.execFile as unknown as jest.Mock;
-    execFile.mockImplementation(
-      (
-        _file: string,
-        _args: string[],
-        _options: object,
-        callback: (e: Error | null, out: string) => void,
-      ) => callback(null, "C:\\Users\\me\\詞彙.txt\r\n"),
-    );
-    await expect(runPowerShell("x")).resolves.toBe("C:\\Users\\me\\詞彙.txt");
-    expect(execFile.mock.calls[0][0]).toBe("powershell.exe");
-    expect(execFile.mock.calls[0][2]).toMatchObject({ windowsHide: true });
+  test("runs powershell.exe hidden, feeds stdin and trims what it prints", async () => {
+    const { EventEmitter } = jest.requireActual("events");
+    const spawn = child_process.spawn as unknown as jest.Mock;
+    const fake = (code: number, stdout: string, stderr = "") => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      const written: string[] = [];
+      child.stdin = {
+        end: (text: string) => {
+          written.push(text);
+          setImmediate(() => {
+            child.stdout.emit("data", Buffer.from(stdout));
+            child.stderr.emit("data", Buffer.from(stderr));
+            child.emit("close", code);
+          });
+        },
+      };
+      return { child, written };
+    };
 
-    execFile.mockImplementation(
-      (
-        _file: string,
-        _args: string[],
-        _options: object,
-        callback: (e: Error | null, out: string) => void,
-      ) => callback(new Error("no powershell"), ""),
-    );
-    await expect(runPowerShell("x")).rejects.toThrow("no powershell");
+    const ok = fake(0, "C:\\Users\\me\\詞彙.txt\r\n");
+    spawn.mockReturnValueOnce(ok.child);
+    await expect(runPowerShell("x", "secret")).resolves.toBe("C:\\Users\\me\\詞彙.txt");
+    expect(spawn.mock.calls[0][0]).toBe("powershell.exe");
+    expect(spawn.mock.calls[0][2]).toMatchObject({ windowsHide: true });
+    expect(ok.written).toEqual(["secret"]);
+    // The secret is not on the command line.
+    expect(JSON.stringify(spawn.mock.calls[0][1])).not.toContain("secret");
+
+    const failed = fake(1, "", "Access denied");
+    spawn.mockReturnValueOnce(failed.child);
+    await expect(runPowerShell("x")).rejects.toThrow("Access denied");
   });
 });

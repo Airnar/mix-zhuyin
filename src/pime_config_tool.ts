@@ -14,6 +14,7 @@ import http from "http";
 import path from "path";
 
 import { localDataDir, userDataDir } from "./pime_paths";
+import { protectSecret } from "./pime_secrets";
 import { defaultSettings } from "./pime_settings";
 import { kSnippetsTemplate } from "./pime_snippets";
 
@@ -41,6 +42,8 @@ export interface ConfigHandlerOptions {
   openPath: (target: string) => void;
   /** Called on every request, to keep the server alive. */
   onActivity?: () => void;
+  /** Encrypts the cloud API key (Windows DPAPI by default). */
+  protect?: (plain: string) => Promise<string>;
 }
 
 const kContentTypes: { [ext: string]: string } = {
@@ -117,11 +120,28 @@ export const createConfigHandler = (
   options: ConfigHandlerOptions,
 ): ((req: http.IncomingMessage, res: http.ServerResponse) => void) => {
   const { staticDir, configDir, token, openPath } = options;
+  const protect = options.protect ?? ((plain: string) => protectSecret(plain));
   const configFile = path.join(configDir, "config.json");
   const userPhrasesFile = path.join(configDir, "data.txt");
   const excludedPhrasesFile = path.join(configDir, "exclude-phrases.txt");
   const snippetsFile = path.join(configDir, "snippets.txt");
   const staticRoot = path.resolve(staticDir) + path.sep;
+
+  const readConfig = (): { [key: string]: unknown } => {
+    try {
+      const value = JSON.parse(readText(configFile) || "{}");
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const writeConfig = (value: object): void => {
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(value, null, 2));
+  };
 
   const ensureFile = (file: string, template = ""): void => {
     fs.mkdirSync(configDir, { recursive: true });
@@ -203,6 +223,7 @@ export const createConfigHandler = (
       "POST /user_phrases",
       "GET /excluded_phrases",
       "POST /excluded_phrases",
+      "POST /ai_key",
       "GET /snippets",
       "POST /snippets",
       "GET /open_snippets",
@@ -219,13 +240,15 @@ export const createConfigHandler = (
     try {
       switch (route) {
         case "GET /config": {
-          let saved = {};
-          try {
-            saved = JSON.parse(readText(configFile) || "{}");
-          } catch {
-            saved = {};
-          }
-          sendJson(res, Object.assign({}, defaultSettings, saved));
+          // The encrypted API key stays on disk; the page only learns
+          // whether there is one.
+          const saved = readConfig();
+          const { ai_cloud_key_dpapi: key, ...rest } = Object.assign(
+            {},
+            defaultSettings,
+            saved,
+          );
+          sendJson(res, { ...rest, ai_cloud_key_set: !!key });
           return;
         }
         case "POST /config": {
@@ -234,9 +257,19 @@ export const createConfigHandler = (
             sendJson(res, { return: false, error: "not a JSON object" });
             return;
           }
-          fs.mkdirSync(configDir, { recursive: true });
-          fs.writeFileSync(configFile, JSON.stringify(value, null, 2));
+          // Only /ai_key changes the key.
+          delete value.ai_cloud_key_set;
+          value.ai_cloud_key_dpapi = readConfig().ai_cloud_key_dpapi ?? "";
+          writeConfig(value);
           sendJson(res, { return: true });
+          return;
+        }
+        case "POST /ai_key": {
+          const plain = (await readBody(req)).trim();
+          const config = readConfig();
+          config.ai_cloud_key_dpapi = plain ? await protect(plain) : "";
+          writeConfig(config);
+          sendJson(res, { return: true, set: !!plain });
           return;
         }
         case "GET /keep_alive":

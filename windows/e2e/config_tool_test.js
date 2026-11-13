@@ -59,6 +59,30 @@ async function main() {
   const snippets = await request({ port, method: "GET", path: "/snippets", headers: { Cookie: cookie } });
   if (snippets.status !== 200 || !snippets.body.startsWith("#")) throw new Error(`snippets: ${snippets.body}`);
   console.log("PASS  settings page server answers on port " + port);
+
+  // The cloud API key is stored with DPAPI: not in the file in plain text,
+  // not sent back to the page, and readable again by this Windows user.
+  const plain = "sk-test-" + Date.now();
+  const saved = await request({ port, method: "POST", path: "/ai_key", headers: { Cookie: cookie } }, plain);
+  if (JSON.parse(saved.body).set !== true) throw new Error(`ai_key: ${saved.body}`);
+  const configText = fs.readFileSync(path.join(roaming, "MixZhuyin", "config.json"), "utf8");
+  const sealed = JSON.parse(configText).ai_cloud_key_dpapi;
+  if (!sealed || configText.includes(plain)) throw new Error("the key is not encrypted");
+  const configPage = await request({ port, method: "GET", path: "/config", headers: { Cookie: cookie } });
+  if (configPage.body.includes(plain) || configPage.body.includes(sealed)) throw new Error("/config leaks the key");
+  const unprotect = [
+    "Add-Type -AssemblyName System.Security",
+    "$entropy = [Text.Encoding]::UTF8.GetBytes('MixZhuyin')",
+    "$bytes = [Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())",
+    "[Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($bytes, $entropy, 'CurrentUser'))",
+  ].join("\n");
+  const opened = child_process.spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(unprotect, "utf16le").toString("base64")],
+    { input: sealed, encoding: "utf8" }
+  );
+  if (opened.stdout.trim() !== plain) throw new Error(`DPAPI round trip failed: ${opened.stderr}`);
+  console.log("PASS  the cloud API key is stored with DPAPI");
 }
 
 main().then(

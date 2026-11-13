@@ -1,7 +1,9 @@
 /**
- * AI help for the input method, from a model the user runs (Ollama on this
- * computer by default) through an OpenAI-compatible chat API. Off unless the
- * user turns it on, and only used when they press its keys:
+ * AI help for the input method. Off unless the user turns it on, and only
+ * used when they press its keys. Each feature uses either the local model
+ * (Ollama on this computer by default, OpenAI-compatible API) or the user's
+ * own cloud AI (Claude, OpenAI, Gemini or any OpenAI-compatible server, with
+ * their API key, which is stored encrypted):
  *
  * - Ctrl+Enter while composing: suggestions for the whole sentence, from
  *   what was typed and how it reads, in the candidate window.
@@ -14,13 +16,52 @@
 
 /** Where the model is. */
 export interface AiSettings {
-  /** The OpenAI-compatible API root, e.g. http://localhost:11434/v1. */
+  /** The API's shape: OpenAI chat completions, or Anthropic messages. */
+  protocol: "openai" | "anthropic";
+  /** The API root, e.g. http://localhost:11434/v1. */
   baseUrl: string;
   /** The model name, e.g. qwen2.5:7b. */
   model: string;
   /** Sent as a bearer token if not empty; Ollama needs none. */
   apiKey: string;
+  /** Whether the model runs on this computer (for error messages). */
+  isLocal: boolean;
+  /** Anthropic: the workspace, for keys not scoped to one. */
+  workspaceId?: string;
 }
+
+/** A cloud service the user can pick, and its defaults. */
+export interface CloudProvider {
+  /** The API's shape. */
+  protocol: "openai" | "anthropic";
+  /** The API root; empty for a custom server. */
+  baseUrl: string;
+  /** A small, fast model for typing help. */
+  model: string;
+}
+
+/** The cloud services the settings page offers. */
+export const kCloudProviders: { [id: string]: CloudProvider } = {
+  claude: {
+    protocol: "anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    model: "claude-haiku-5-5",
+  },
+  openai: {
+    protocol: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-6-luna",
+  },
+  gemini: {
+    protocol: "openai",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-3.8-flash",
+  },
+  custom: { protocol: "openai", baseUrl: "", model: "" },
+};
+
+/** The Anthropic API version the client speaks. */
+export const kAnthropicVersion = "2026-10-21";
 
 /** Ollama's OpenAI-compatible API on this computer. */
 export const kDefaultAiBaseUrl = "http://localhost:11434/v1";
@@ -102,6 +143,88 @@ const kSystem =
   "你是台灣使用者的輸入法助手。一律使用台灣正體中文與台灣用語，回答要簡短，不要加任何說明或客套話。";
 
 /**
+ * Asks Claude once, with the Anthropic Messages API.
+ * @param settings Where the model is.
+ * @param messages The conversation; system messages become the system prompt.
+ * @param fetchImpl The fetch function.
+ * @param timeoutMs Give up after this long.
+ * @returns The answer's text.
+ */
+export const anthropicMessages = async (
+  settings: AiSettings,
+  messages: ChatMessage[],
+  fetchImpl: FetchLike,
+  timeoutMs = 30000,
+): Promise<string> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers: { [name: string]: string } = {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + settings.apiKey,
+      "anthropic-version": kAnthropicVersion,
+    };
+    if (settings.workspaceId) {
+      headers["anthropic-workspace-id"] = settings.workspaceId;
+    }
+    const system = messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n");
+    const response = await fetchImpl(
+      settings.baseUrl.replace(/\/+$/, "") + "/messages",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: settings.model,
+          max_tokens: 1024,
+          ...(system ? { system } : {}),
+          messages: messages
+            .filter((m) => m.role !== "system")
+            .map((m) => ({ role: m.role, content: m.content })),
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+    const data = (await response.json()) as {
+      content?: { type?: string; text?: unknown }[];
+    };
+    const text = (data?.content ?? [])
+      .filter((b) => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text as string)
+      .join("");
+    if (!text) {
+      throw new Error("the model gave no answer");
+    }
+    return text.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Asks the model once, in the API shape its settings say.
+ * @param settings Where the model is.
+ * @param messages The conversation.
+ * @param fetchImpl The fetch function.
+ * @param timeoutMs Give up after this long.
+ * @returns The answer.
+ */
+export const askModel = (
+  settings: AiSettings,
+  messages: ChatMessage[],
+  fetchImpl: FetchLike,
+  timeoutMs = 30000,
+): Promise<string> =>
+  settings.protocol === "anthropic"
+    ? anthropicMessages(settings, messages, fetchImpl, timeoutMs)
+    : chatCompletion(settings, messages, fetchImpl, timeoutMs);
+
+/**
  * The prompt for Ctrl+Enter.
  * @param text What the input method shows now.
  * @param readings How it reads (Bopomofo, English as typed).
@@ -173,10 +296,13 @@ export const parseSuggestions = (answer: string): string[] => {
   return out.slice(0, 5);
 };
 
+/** The AI features, each of which may use the local or the cloud model. */
+export type AiTask = "correct" | "explain" | "rewrite";
+
 /** What the input method gives the assistant. */
 export interface AiHost {
-  /** Where the model is, or undefined while AI is off. */
-  settings: () => AiSettings | undefined;
+  /** Where the model for a feature is, or undefined while AI is off. */
+  settingsFor: (task: AiTask) => AiSettings | undefined;
   /** What mixed mode is composing, or undefined. */
   composing: () => { raw: string; text: string; readings: string } | undefined;
   /** Shows suggestions in the candidate window; false if it cannot. */
@@ -200,10 +326,9 @@ export interface AiKey {
   alt: boolean;
 }
 
-type AiTask = "correct" | "explain" | "rewrite";
-
 interface Job {
   task: AiTask;
+  isLocal: boolean;
   startedAt: number;
   input: string;
   done: boolean;
@@ -220,7 +345,15 @@ const VK_R = 0x52;
 const kLookupWindowMs = 15000;
 /** How often the text service asks again while the model thinks. */
 const kPollMs = 300;
-const kNoAnswer = "AI 沒有回應，請確認 Ollama 已經啟動，模型名稱也正確。";
+const kNoLocalAnswer = "本機 AI 沒有回應，請確認 Ollama 已經啟動，模型名稱也正確。";
+
+/** What to tell the user when a job failed. */
+const failureMessage = (job: Job): string =>
+  job.isLocal
+    ? kNoLocalAnswer
+    : "雲端 AI 沒有回應（" +
+      (job.error ?? "") +
+      "），請確認 API 金鑰、模型名稱和網路。";
 
 /** Runs the AI features; see the file comment. */
 export class AiAssistant {
@@ -244,11 +377,18 @@ export class AiAssistant {
    * @returns A hint for the lookup popup, or undefined while AI is off.
    */
   rememberLookup(text: string, now: number): string | undefined {
-    if (!this.host.settings()) {
+    const hints: string[] = [];
+    if (this.host.settingsFor("explain")) {
+      hints.push("Ctrl+E AI 解釋");
+    }
+    if (this.host.settingsFor("rewrite")) {
+      hints.push("Ctrl+R AI 改寫");
+    }
+    if (hints.length === 0) {
       return undefined;
     }
     this.lookup_ = { text, at: now };
-    return "Ctrl+E AI 解釋　Ctrl+R AI 改寫";
+    return hints.join("　");
   }
 
   /**
@@ -273,13 +413,13 @@ export class AiAssistant {
       this.rewrite_ = undefined;
     }
 
-    const settings = this.host.settings();
-    if (!settings || !key.ctrl || key.alt || key.shift) {
+    if (!key.ctrl || key.alt || key.shift) {
       return undefined;
     }
     const composing = this.host.composing();
-    if (key.keyCode === VK_RETURN && composing) {
-      this.start_("correct", composing.raw, now, settings,
+    const correct = this.host.settingsFor("correct");
+    if (key.keyCode === VK_RETURN && composing && correct) {
+      this.start_("correct", composing.raw, now, correct,
         correctionPrompt(composing.text, composing.readings));
       return {
         fields: {
@@ -294,6 +434,10 @@ export class AiAssistant {
     }
     if (key.keyCode === VK_E || key.keyCode === VK_R) {
       const explain = key.keyCode === VK_E;
+      const settings = this.host.settingsFor(explain ? "explain" : "rewrite");
+      if (!settings) {
+        return undefined;
+      }
       this.start_(explain ? "explain" : "rewrite", lookup.text, now, settings,
         explain ? explainPrompt(lookup.text) : rewritePrompt(lookup.text));
       return {
@@ -323,7 +467,7 @@ export class AiAssistant {
         return { fields: { refreshAfter: kPollMs } };
       }
       job.done = true;
-      job.error = "timeout";
+      job.error = "逾時";
     }
     this.job_ = undefined;
 
@@ -339,7 +483,7 @@ export class AiAssistant {
       return {
         fields: {
           showMessage: {
-            message: job.error ? kNoAnswer : "AI 沒有建議",
+            message: job.error ? failureMessage(job) : "AI 沒有建議",
             duration: 5,
           },
         },
@@ -347,7 +491,9 @@ export class AiAssistant {
     }
 
     if (job.error) {
-      return { fields: { showLookup: { message: kNoAnswer, duration: 8 } } };
+      return {
+        fields: { showLookup: { message: failureMessage(job), duration: 8 } },
+      };
     }
     const answer = (job.answer ?? "").trim();
     if (job.task === "explain") {
@@ -375,7 +521,13 @@ export class AiAssistant {
     settings: AiSettings,
     messages: ChatMessage[],
   ): void {
-    const job: Job = { task, startedAt: now, input, done: false };
+    const job: Job = {
+      task,
+      isLocal: settings.isLocal,
+      startedAt: now,
+      input,
+      done: false,
+    };
     this.job_ = job;
     this.rewrite_ = undefined;
     this.host.chat(settings, messages).then(
@@ -384,7 +536,7 @@ export class AiAssistant {
         job.done = true;
       },
       (e) => {
-        job.error = String(e);
+        job.error = e instanceof Error ? e.message : String(e);
         job.done = true;
       },
     );

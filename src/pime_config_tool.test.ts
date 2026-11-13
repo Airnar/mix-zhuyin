@@ -67,6 +67,7 @@ describe("settings page server", () => {
         token,
         openPath: (p) => opened.push(p),
         onActivity: () => activity++,
+        protect: async (plain) => "enc(" + plain + ")",
       }),
     );
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -126,7 +127,8 @@ describe("settings page server", () => {
 
   test("reads settings over the defaults and saves them", async () => {
     const first = JSON.parse((await request("GET", "/config", undefined, cookie)).body);
-    expect(first).toEqual(defaultSettings);
+    const { ai_cloud_key_dpapi: _key, ...visibleDefaults } = defaultSettings;
+    expect(first).toEqual({ ...visibleDefaults, ai_cloud_key_set: false });
 
     const saved = await request(
       "POST",
@@ -138,7 +140,11 @@ describe("settings page server", () => {
     const file = JSON.parse(
       fs.readFileSync(path.join(configDir, "config.json"), "utf8"),
     );
-    expect(file).toEqual({ mixed_mode: false, candidate_font_size: 20 });
+    expect(file).toEqual({
+      mixed_mode: false,
+      candidate_font_size: 20,
+      ai_cloud_key_dpapi: "",
+    });
 
     const again = JSON.parse((await request("GET", "/config", undefined, cookie)).body);
     expect(again.mixed_mode).toBe(false);
@@ -186,6 +192,45 @@ describe("settings page server", () => {
   test("lets the snippets page log in", async () => {
     expect(kPages).toContain("snippets");
     expect((await request("GET", "/snippets")).status).toBe(403);
+  });
+
+  test("stores the cloud API key encrypted and never sends it back", async () => {
+    const saved = JSON.parse(
+      (await request("POST", "/ai_key", "  sk-ant-secret \n", cookie)).body,
+    );
+    expect(saved).toEqual({ return: true, set: true });
+    const file = JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf8"));
+    expect(file.ai_cloud_key_dpapi).toBe("enc(sk-ant-secret)");
+
+    const config = (await request("GET", "/config", undefined, cookie)).body;
+    expect(config).not.toContain("sk-ant-secret");
+    expect(config).not.toContain("enc(");
+    expect(JSON.parse(config).ai_cloud_key_set).toBe(true);
+
+    // Saving the other settings keeps the key, whatever the page sends.
+    await request(
+      "POST",
+      "/config",
+      JSON.stringify({ ai_enabled: true, ai_cloud_key_dpapi: "", ai_cloud_key_set: false }),
+      cookie,
+    );
+    const after = JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf8"));
+    expect(after.ai_enabled).toBe(true);
+    expect(after.ai_cloud_key_dpapi).toBe("enc(sk-ant-secret)");
+    expect(after.ai_cloud_key_set).toBeUndefined();
+
+    // An empty key clears it.
+    expect(JSON.parse((await request("POST", "/ai_key", "", cookie)).body)).toEqual({
+      return: true,
+      set: false,
+    });
+    const cleared = JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf8"));
+    expect(cleared.ai_cloud_key_dpapi).toBe("");
+    expect(cleared.ai_enabled).toBe(true);
+  });
+
+  test("needs the token to store a key", async () => {
+    expect((await request("POST", "/ai_key", "k")).status).toBe(403);
   });
 
   test("opens the data folder and phrase files", async () => {

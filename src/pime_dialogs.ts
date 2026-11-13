@@ -65,20 +65,31 @@ export const powerShellArgs = (script: string): string[] => [
 /**
  * Runs a script with Windows PowerShell, hidden.
  * @param script The script.
+ * @param input Text for the script's standard input (secrets go here, never
+ *   on the command line).
  * @returns What it printed, trimmed.
  */
-export const runPowerShell = (script: string): Promise<string> =>
+export const runPowerShell = (script: string, input = ""): Promise<string> =>
   new Promise((resolve, reject) => {
-    child_process.execFile(
-      "powershell.exe",
-      powerShellArgs(script),
-      { windowsHide: true, encoding: "utf8", maxBuffer: 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(String(stdout).trim());
-      },
-    );
+    const child = child_process.spawn("powershell.exe", powerShellArgs(script), {
+      windowsHide: true,
+    });
+    const out: Buffer[] = [];
+    const err: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => out.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code: number) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            Buffer.concat(err).toString("utf8").trim() ||
+              "PowerShell exited with " + code,
+          ),
+        );
+        return;
+      }
+      resolve(Buffer.concat(out).toString("utf8").trim());
+    });
+    child.stdin.end(input, "utf8");
   });

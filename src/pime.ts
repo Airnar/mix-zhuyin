@@ -18,8 +18,11 @@ import { InputUI } from "./McBopomofo/InputUI";
 import {
   AiAssistant,
   AiResponse,
-  chatCompletion,
+  AiSettings,
+  AiTask,
+  askModel,
   FetchLike,
+  kCloudProviders,
   kDefaultAiBaseUrl,
   kDefaultAiModel,
 } from "./pime_ai";
@@ -37,6 +40,7 @@ import {
 } from "./pime_lookup";
 import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
 import { importPhraseFile, importSummary } from "./pime_phrase_import";
+import { unprotectSecret } from "./pime_secrets";
 import { defaultSettings, Settings } from "./pime_settings";
 import { kSnippetsTemplate, parseSnippets } from "./pime_snippets";
 import { candidateUi, compositionHighlight } from "./pime_ui";
@@ -122,23 +126,77 @@ class PimeMcBopomofo {
   /** Spots Ctrl tapped twice, for 框選查詢. */
   readonly ctrlTaps = new DoubleCtrlDetector();
 
+  /**
+   * Where the model for an AI feature is: the local one, or the user's cloud
+   * service, as the settings say. Undefined while AI is off.
+   */
+  public aiSettingsFor(task: AiTask): AiSettings | undefined {
+    const s = this.settings;
+    if (!s.ai_enabled) {
+      return undefined;
+    }
+    const source =
+      task === "correct"
+        ? s.ai_correct_source
+        : task === "explain"
+          ? s.ai_explain_source
+          : s.ai_rewrite_source;
+    if (source === "cloud") {
+      const provider =
+        kCloudProviders[s.ai_cloud_provider] ?? kCloudProviders.custom;
+      return {
+        protocol: provider.protocol,
+        baseUrl: s.ai_cloud_base_url || provider.baseUrl,
+        model: s.ai_cloud_model || provider.model,
+        apiKey: "",
+        isLocal: false,
+        workspaceId: s.ai_cloud_workspace || undefined,
+      };
+    }
+    return {
+      protocol: "openai",
+      baseUrl: s.ai_base_url || kDefaultAiBaseUrl,
+      model: s.ai_model || kDefaultAiModel,
+      apiKey: s.ai_api_key || "",
+      isLocal: true,
+    };
+  }
+
+  // The decrypted cloud key, kept while the encrypted one stays the same.
+  private cloudKey_: { sealed: string; key: Promise<string> } | undefined;
+
+  /** The cloud API key, decrypted with DPAPI on first use. */
+  private cloudKey(): Promise<string> {
+    const sealed = this.settings.ai_cloud_key_dpapi || "";
+    if (!sealed) {
+      return Promise.reject(new Error("還沒設定 API 金鑰"));
+    }
+    if (!this.cloudKey_ || this.cloudKey_.sealed !== sealed) {
+      const key = unprotectSecret(sealed);
+      key.catch(() => {
+        this.cloudKey_ = undefined;
+      });
+      this.cloudKey_ = { sealed, key };
+    }
+    return this.cloudKey_.key;
+  }
+
   /** The AI keys (off unless the user turns them on). */
   readonly ai = new AiAssistant({
-    settings: () =>
-      this.settings.ai_enabled
-        ? {
-            baseUrl: this.settings.ai_base_url || kDefaultAiBaseUrl,
-            model: this.settings.ai_model || kDefaultAiModel,
-            apiKey: this.settings.ai_api_key || "",
-          }
-        : undefined,
+    settingsFor: (task) => this.aiSettingsFor(task),
     composing: () => this.inputController.mixedSnapshot(),
     showSuggestions: (sentences) => {
       this.resetBeforeHandlingKey();
       return this.inputController.showAiCandidates(sentences);
     },
-    chat: (settings, messages) =>
-      chatCompletion(settings, messages, fetch as unknown as FetchLike),
+    chat: async (settings, messages) => {
+      const apiKey = settings.isLocal ? settings.apiKey : await this.cloudKey();
+      return askModel(
+        { ...settings, apiKey },
+        messages,
+        fetch as unknown as FetchLike,
+      );
+    },
   });
   /** What onKeyDown answers for a key the AI took in filterKeyDown. */
   pendingAiResponse: AiResponse | undefined = undefined;

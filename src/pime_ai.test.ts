@@ -2,20 +2,35 @@ import {
   AiAssistant,
   AiHost,
   AiSettings,
+  AiTask,
+  anthropicMessages,
+  askModel,
   chatCompletion,
   ChatMessage,
   correctionPrompt,
   explainPrompt,
   FetchLike,
+  kAnthropicVersion,
+  kCloudProviders,
   kDefaultAiBaseUrl,
   parseSuggestions,
   rewritePrompt,
 } from "./pime_ai";
 
 const settings: AiSettings = {
+  protocol: "openai",
   baseUrl: kDefaultAiBaseUrl,
   model: "qwen2.5:7b",
   apiKey: "",
+  isLocal: true,
+};
+
+const claude: AiSettings = {
+  protocol: "anthropic",
+  baseUrl: kCloudProviders.claude.baseUrl,
+  model: kCloudProviders.claude.model,
+  apiKey: "sk-ant-test",
+  isLocal: false,
 };
 
 const answer = (content: unknown, ok = true, status = 200): FetchLike =>
@@ -75,6 +90,61 @@ describe("chatCompletion", () => {
   });
 });
 
+describe("anthropicMessages", () => {
+  const reply = (body: unknown, ok = true, status = 200): FetchLike =>
+    jest.fn(async () => ({ ok, status, json: async () => body }));
+
+  test("posts to the Messages API with the system prompt apart", async () => {
+    const fetchImpl = reply({ content: [{ type: "text", text: "記得帶傘" }] });
+    const messages: ChatMessage[] = [
+      { role: "system", content: "be brief" },
+      { role: "user", content: "hi" },
+    ];
+    await expect(anthropicMessages(claude, messages, fetchImpl)).resolves.toBe("記得帶傘");
+    const [url, init] = (fetchImpl as jest.Mock).mock.calls[0];
+    expect(url).toBe("https://api.anthropic.com/v1/messages");
+    expect(init.headers.Authorization).toBe("Bearer sk-ant-test");
+    expect(init.headers["anthropic-version"]).toBe(kAnthropicVersion);
+    expect(init.headers["anthropic-workspace-id"]).toBeUndefined();
+    expect(JSON.parse(init.body)).toEqual({
+      model: "claude-haiku-5-5",
+      max_tokens: 1024,
+      system: "be brief",
+      messages: [{ role: "user", content: "hi" }],
+    });
+  });
+
+  test("sends the workspace when there is one", async () => {
+    const fetchImpl = reply({ content: [{ type: "text", text: "ok" }] });
+    await anthropicMessages({ ...claude, workspaceId: "wrkspc_1" }, [], fetchImpl);
+    expect((fetchImpl as jest.Mock).mock.calls[0][1].headers["anthropic-workspace-id"]).toBe(
+      "wrkspc_1",
+    );
+  });
+
+  test("fails on HTTP errors and answers without text", async () => {
+    await expect(anthropicMessages(claude, [], reply({}, false, 401))).rejects.toThrow("HTTP 401");
+    await expect(anthropicMessages(claude, [], reply({ content: [] }))).rejects.toThrow(
+      "no answer",
+    );
+  });
+
+  test("askModel picks the API by protocol", async () => {
+    const anthropic = reply({ content: [{ type: "text", text: "A" }] });
+    await expect(askModel(claude, [], anthropic)).resolves.toBe("A");
+    expect((anthropic as jest.Mock).mock.calls[0][0]).toContain("/messages");
+    const openai = answer("B");
+    await expect(askModel(settings, [], openai)).resolves.toBe("B");
+    expect((openai as jest.Mock).mock.calls[0][0]).toContain("/chat/completions");
+  });
+
+  test("offers Claude, OpenAI, Gemini and a custom server", () => {
+    expect(Object.keys(kCloudProviders)).toEqual(["claude", "openai", "gemini", "custom"]);
+    expect(kCloudProviders.gemini.baseUrl).toContain("generativelanguage.googleapis.com");
+    expect(kCloudProviders.openai.protocol).toBe("openai");
+  });
+});
+
 describe("prompts", () => {
   test("carry the text and its reading", () => {
     const messages = correctionPrompt("記得代傘", "ㄐㄧˋ ㄉㄜ˙ ㄉㄞˋ ㄙㄢˇ");
@@ -119,7 +189,7 @@ describe("AiAssistant", () => {
     const shown: string[][] = [];
     const asked: ChatMessage[][] = [];
     const host: AiHost = {
-      settings: () => settings,
+      settingsFor: () => settings,
       composing: () => undefined,
       showSuggestions: (s) => {
         shown.push(s);
@@ -136,7 +206,7 @@ describe("AiAssistant", () => {
 
   test("does nothing while AI is off", () => {
     const { host } = makeHost({
-      settings: () => undefined,
+      settingsFor: () => undefined,
       composing: () => ({ raw: "x", text: "x", readings: "x" }),
     });
     const ai = new AiAssistant(host);
@@ -248,5 +318,36 @@ describe("AiAssistant", () => {
     ai.keyDown(ctrl(0x45), 10);
     await flush();
     expect(JSON.stringify(ai.refresh(100).fields)).toContain("Ollama");
+  });
+
+  test("each feature uses its own model", async () => {
+    const used: AiSettings[] = [];
+    const { host } = makeHost({
+      settingsFor: (task: AiTask) => (task === "correct" ? settings : task === "explain" ? claude : undefined),
+      chat: async (s) => (used.push(s), "答"),
+    });
+    const ai = new AiAssistant(host);
+    // Only the features that have a model are offered.
+    expect(ai.rememberLookup("銀行", 0)).toBe("Ctrl+E AI 解釋");
+    expect(ai.keyDown(ctrl(0x52), 10)).toBeUndefined();
+    ai.keyDown(ctrl(0x45), 10);
+    await flush();
+    ai.refresh(100);
+    expect(used[0].isLocal).toBe(false);
+  });
+
+  test("a cloud failure says so, with the reason", async () => {
+    const { host } = makeHost({
+      settingsFor: () => claude,
+      chat: async () => Promise.reject(new Error("HTTP 401")),
+    });
+    const ai = new AiAssistant(host);
+    ai.rememberLookup("銀行", 0);
+    ai.keyDown(ctrl(0x45), 10);
+    await flush();
+    const message = JSON.stringify(ai.refresh(100).fields);
+    expect(message).toContain("雲端 AI");
+    expect(message).toContain("HTTP 401");
+    expect(message).not.toContain("Ollama");
   });
 });

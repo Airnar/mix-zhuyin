@@ -84,6 +84,25 @@ export interface Settings {
   ai_model: string;
   /** An API key, if the server needs one (Ollama does not). */
   ai_api_key: string;
+  /** The cloud AI service: "claude", "openai", "gemini" or "custom". */
+  ai_cloud_provider: string;
+  /** The cloud model; empty for the service's default. */
+  ai_cloud_model: string;
+  /** The API root of a custom (OpenAI-compatible) cloud service. */
+  ai_cloud_base_url: string;
+  /** Claude: the workspace ID, for API keys not scoped to one. */
+  ai_cloud_workspace: string;
+  /**
+   * The cloud API key, encrypted with Windows DPAPI for this user (Base64).
+   * Only the settings server's /ai_key endpoint writes it.
+   */
+  ai_cloud_key_dpapi: string;
+  /** Which model Ctrl+Enter (fix the sentence) uses: "local" or "cloud". */
+  ai_correct_source: string;
+  /** Which model Ctrl+E (explain) uses: "local" or "cloud". */
+  ai_explain_source: string;
+  /** Which model Ctrl+R (rewrite) uses: "local" or "cloud". */
+  ai_rewrite_source: string;
 }
 
 /** The default settings, used when the settings file lacks a key. */
@@ -115,4 +134,12 @@ export const defaultSettings: Settings = {
   ai_base_url: kDefaultAiBaseUrl,
   ai_model: kDefaultAiModel,
   ai_api_key: "",
+  ai_cloud_provider: "claude",
+  ai_cloud_model: "",
+  ai_cloud_base_url: "",
+  ai_cloud_workspace: "",
+  ai_cloud_key_dpapi: "",
+  ai_correct_source: "local",
+  ai_explain_source: "local",
+  ai_rewrite_source: "local",
 };

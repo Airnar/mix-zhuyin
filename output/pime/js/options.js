@@ -27,6 +27,21 @@ window.onload = () => {
     ai_base_url: "http://localhost:11434/v1",
     ai_model: "qwen2.5:7b",
     ai_api_key: "",
+    ai_cloud_provider: "claude",
+    ai_cloud_model: "",
+    ai_cloud_base_url: "",
+    ai_cloud_workspace: "",
+    ai_correct_source: "local",
+    ai_explain_source: "local",
+    ai_rewrite_source: "local",
+  };
+
+  // Default models of the cloud services (kCloudProviders in pime_ai.ts).
+  const cloudModels = {
+    claude: "claude-haiku-5-5",
+    openai: "gpt-6-luna",
+    gemini: "gemini-3.8-flash",
+    custom: "",
   };
 
   let settings = {};
@@ -226,8 +241,52 @@ window.onload = () => {
       $("ai_enabled").checked = settings.ai_enabled === true;
       $("ai_model").value = settings.ai_model || defaultSettings.ai_model;
       $("ai_base_url").value = settings.ai_base_url || defaultSettings.ai_base_url;
+      for (const id of ["ai_correct_source", "ai_explain_source", "ai_rewrite_source"]) {
+        $(id).value = settings[id] === "cloud" ? "cloud" : "local";
+      }
+      $("ai_cloud_provider").value = settings.ai_cloud_provider || "claude";
+      $("ai_cloud_model").value = settings.ai_cloud_model || "";
+      $("ai_cloud_base_url").value = settings.ai_cloud_base_url || "";
+      $("ai_cloud_workspace").value = settings.ai_cloud_workspace || "";
+      showKeyStatus(settings.ai_cloud_key_set === true);
+      renderCloudRows();
     }
     renderPreview();
+  }
+
+  function renderCloudRows() {
+    const provider = $("ai_cloud_provider").value;
+    $("ai_cloud_base_url_row").hidden = provider !== "custom";
+    $("ai_cloud_workspace_row").hidden = provider !== "claude";
+    $("ai_cloud_model").placeholder = cloudModels[provider] || "模型名稱";
+  }
+
+  function showKeyStatus(set) {
+    $("ai_cloud_key_status").textContent = set ? "已設定（已加密）" : "未設定";
+  }
+
+  function saveKey(key) {
+    const xhttp = new XMLHttpRequest();
+    xhttp.onload = function () {
+      let result = {};
+      try {
+        result = JSON.parse(this.responseText);
+      } catch {
+        result = {};
+      }
+      if (this.status >= 200 && this.status < 300 && result.return) {
+        showKeyStatus(result.set);
+        $("ai_cloud_key").value = "";
+        showStatus(result.set ? "金鑰已加密儲存" : "金鑰已清除", false);
+      } else {
+        showStatus("金鑰儲存失敗", true);
+      }
+    };
+    xhttp.onerror = function () {
+      showStatus("金鑰儲存失敗", true);
+    };
+    xhttp.open("POST", "/ai_key");
+    xhttp.send(key);
   }
 
   function openUserDataFolder() {
@@ -397,6 +456,38 @@ window.onload = () => {
   $("ai_enabled").onchange = () => {
     settings.ai_enabled = $("ai_enabled").checked;
     saveSettings(settings);
+  };
+
+  for (const id of ["ai_correct_source", "ai_explain_source", "ai_rewrite_source"]) {
+    $(id).onchange = () => {
+      settings[id] = $(id).value;
+      saveSettings(settings);
+    };
+  }
+
+  $("ai_cloud_provider").onchange = () => {
+    settings.ai_cloud_provider = $("ai_cloud_provider").value;
+    renderCloudRows();
+    saveSettings(settings);
+  };
+
+  for (const id of ["ai_cloud_model", "ai_cloud_base_url", "ai_cloud_workspace"]) {
+    $(id).onchange = () => {
+      settings[id] = $(id).value.trim();
+      $(id).value = settings[id];
+      saveSettings(settings);
+    };
+  }
+
+  $("ai_cloud_key_save").onclick = () => {
+    const key = $("ai_cloud_key").value.trim();
+    if (key) {
+      saveKey(key);
+    }
+  };
+
+  $("ai_cloud_key_clear").onclick = () => {
+    saveKey("");
   };
 
   for (const id of ["ai_model", "ai_base_url"]) {
