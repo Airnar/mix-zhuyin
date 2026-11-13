@@ -1162,6 +1162,22 @@ export class InputController {
         )
       );
       this.ui_.append(new ComposingBufferText(state.tail));
+    } else if (
+      state instanceof ChoosingCandidate &&
+      state.highlightRange &&
+      state.highlightRange.end > state.highlightRange.start
+    ) {
+      // Show which part of the text the candidates replace.
+      const { start, end } = state.highlightRange;
+      const buffer = state.composingBuffer;
+      this.ui_.append(new ComposingBufferText(buffer.slice(0, start)));
+      this.ui_.append(
+        new ComposingBufferText(
+          buffer.slice(start, end),
+          ComposingBufferTextStyle.Highlighted
+        )
+      );
+      this.ui_.append(new ComposingBufferText(buffer.slice(end)));
     } else {
       this.ui_.append(new ComposingBufferText(state.composingBuffer));
     }
@@ -1256,6 +1272,12 @@ export class InputController {
     }
 
     this.candidateController_.update(candidates, keys);
+    if (state instanceof ChoosingCandidate) {
+      const start = state.initialSelectedIndex;
+      if (start > 0 && start < candidates.length) {
+        this.candidateController_.selectedIndex = start;
+      }
+    }
     const result = this.candidateController_.currentPage;
     this.ui_.setCandidates(result);
     const totalPageCount = this.candidateController_.totalPageCount;

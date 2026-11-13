@@ -109,6 +109,20 @@ describe("KeyHandler in mixed mode", () => {
     expect(s.composing).toBe(other.value);
   });
 
+  test("Down marks the character being changed and starts on it", () => {
+    const s = new Session(mixedHandler());
+    s.type("ru42k7294n03");
+    expect(s.composing).toBe("記得帶傘");
+    s.key(Key.namedKey(KeyName.LEFT));
+    s.key(Key.namedKey(KeyName.DOWN));
+    expect(s.state).toBeInstanceOf(ChoosingCandidate);
+    const choosing = s.state as ChoosingCandidate;
+    expect(choosing.highlightRange).toEqual({ start: 2, end: 3 });
+    // The list leads with 代, but the highlight starts on 帶, the current one.
+    expect(choosing.candidates[0].value).not.toBe("帶");
+    expect(choosing.candidates[choosing.initialSelectedIndex].value).toBe("帶");
+  });
+
   test("Shift tap switches the segment", () => {
     const h = mixedHandler();
     const s = new Session(h);

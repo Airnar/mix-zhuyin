@@ -32,6 +32,11 @@ export interface ComposingView {
   /** Cursor position in `text`, after the focused unit. */
   readonly cursorIndex: number;
   readonly segments: ComposingSegment[];
+  /**
+   * Where the unit under the cursor is in `text` (end exclusive): the
+   * character or word that candidates replace.
+   */
+  readonly focusRange?: { start: number; end: number };
   /** Completion offered for the last English word (accepted with Tab). */
   readonly prediction?: string;
 }
@@ -498,6 +503,38 @@ export class MixedComposer {
     return list;
   }
 
+  /**
+   * The index in `list` (from {@link candidates}) of the phrase the text uses
+   * now, so a candidate window can start there; 0 when none matches.
+   */
+  currentCandidateIndex(list: MixedCandidate[]): number {
+    const unit = this.units_[this.focusIndex_];
+    if (!unit || unit.kind !== "zh") {
+      return 0;
+    }
+    // The current character of each Chinese syllable, by its raw position.
+    const charAt = new Map<number, string>();
+    for (const t of this.result.tokens) {
+      if (t.type !== MixedTokenType.Chinese || !t.syllables) {
+        continue;
+      }
+      const chars = Array.from(t.output);
+      if (chars.length !== t.syllables.length) {
+        continue;
+      }
+      t.syllables.forEach((_, k) => charAt.set(t.syllableStarts![k], chars[k]));
+    }
+    const index = list.findIndex((c) => {
+      if (c.kind !== MixedCandidateKind.Phrase || !c.phrase) {
+        return false;
+      }
+      const starts = c.phrase.syllableStarts.slice(0, -1);
+      const now = starts.map((p) => charAt.get(p) ?? "\u0000").join("");
+      return now === c.value;
+    });
+    return Math.max(0, index);
+  }
+
   /** Applies a candidate from {@link candidates}. */
   selectCandidate(candidate: MixedCandidate): boolean {
     switch (candidate.kind) {
@@ -588,6 +625,7 @@ export class MixedComposer {
     const segments: ComposingSegment[] = [];
     let text = "";
     let cursorIndex = 0;
+    let focusRange: { start: number; end: number } | undefined;
     let last = this.precedingCharacter.slice(-1);
     tokens.forEach((t, ti) => {
       if (!t.output) {
@@ -606,13 +644,21 @@ export class MixedComposer {
       if (focused) {
         if (t.type === MixedTokenType.Chinese && focusUnit.kind === "zh") {
           const chars = Array.from(t.output);
-          const upTo =
-            chars.length === t.syllables!.length
-              ? chars.slice(0, focusUnit.syllable + 1).join("")
-              : t.output;
+          const oneCharEach = chars.length === t.syllables!.length;
+          const before = oneCharEach
+            ? chars.slice(0, focusUnit.syllable).join("")
+            : "";
+          const upTo = oneCharEach
+            ? chars.slice(0, focusUnit.syllable + 1).join("")
+            : t.output;
           cursorIndex = text.length + upTo.length;
+          focusRange = {
+            start: text.length + before.length,
+            end: cursorIndex,
+          };
         } else {
           cursorIndex = text.length + t.output.replace(/ $/, "").length;
+          focusRange = { start: text.length, end: cursorIndex };
         }
       }
       text += t.output;
@@ -627,7 +673,13 @@ export class MixedComposer {
     if (!focusUnit) {
       cursorIndex = text.length;
     }
-    return { text, cursorIndex, segments, prediction: this.prediction };
+    return {
+      text,
+      cursorIndex,
+      segments,
+      focusRange,
+      prediction: this.prediction,
+    };
   }
 
   /**

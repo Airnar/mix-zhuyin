@@ -1,5 +1,6 @@
 import {
   candidateUi,
+  compositionHighlight,
   kCandidateFonts,
   kDefaultCandidateFont,
 } from "./pime_ui";
@@ -48,5 +49,35 @@ describe("candidateUi", () => {
     for (const font of kCandidateFonts) {
       expect(font.label.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("compositionHighlight", () => {
+  test("finds the highlighted segment in code points", () => {
+    expect(
+      compositionHighlight([
+        { text: "記得", style: "normal" },
+        { text: "帶", style: "highlighted" },
+        { text: "傘", style: "normal" },
+      ]),
+    ).toEqual([2, 3]);
+  });
+
+  test("counts characters outside the BMP once", () => {
+    expect(
+      compositionHighlight([
+        { text: "𠮷a", style: "normal" },
+        { text: "b", style: "highlighted" },
+      ]),
+    ).toEqual([2, 3]);
+  });
+
+  test("is undefined without a highlighted segment", () => {
+    expect(compositionHighlight([{ text: "你好", style: "normal" }])).toBe(
+      undefined,
+    );
+    expect(compositionHighlight([{ text: "", style: "highlighted" }])).toBe(
+      undefined,
+    );
   });
 });

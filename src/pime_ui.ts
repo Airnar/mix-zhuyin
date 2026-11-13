@@ -62,3 +62,31 @@ export const candidateUi = (settings: CandidateUiSettings): CandidateUi => {
     candUseCursor: true,
   };
 };
+
+/** A segment of the composing buffer, as InputController reports it. */
+export interface ComposingSegmentText {
+  text: string;
+  style: string;
+}
+
+/**
+ * Where the highlighted segment is in the composition: the part the
+ * candidate window replaces, or a marked range. PIME counts the composition
+ * cursor in code points, so this does too.
+ * @param segments The composing buffer segments.
+ * @returns `[start, end)` in code points, or undefined when nothing is
+ * highlighted.
+ */
+export const compositionHighlight = (
+  segments: ComposingSegmentText[],
+): [number, number] | undefined => {
+  let position = 0;
+  for (const segment of segments) {
+    const length = Array.from(segment.text).length;
+    if (segment.style === "highlighted" && length > 0) {
+      return [position, position + length];
+    }
+    position += length;
+  }
+  return undefined;
+};

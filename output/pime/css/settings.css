@@ -259,7 +259,7 @@ select:focus-visible,
   --cand-border: #d6d6d6;
   --cand-text: #1a1a1a;
   --cand-key: #707070;
-  --cand-selected: #dde8f6;
+  --cand-selected: #cce0f7;
   --cand-selected-text: #1a1a1a;
   --cand-accent: #1b5cab;
   display: inline-grid;
@@ -281,7 +281,7 @@ select:focus-visible,
     --cand-border: #484848;
     --cand-text: #f3f3f3;
     --cand-key: #a0a0a0;
-    --cand-selected: #374558;
+    --cand-selected: #264a78;
     --cand-selected-text: #ffffff;
     --cand-accent: #6aa5ef;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
@@ -309,6 +309,10 @@ select:focus-visible,
 .cand-window .current {
   background: var(--cand-selected);
   color: var(--cand-selected-text);
+}
+
+.cand-window .current b {
+  color: var(--cand-accent);
 }
 
 .cand-window .current::before {

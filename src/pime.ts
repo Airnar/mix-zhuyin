@@ -19,7 +19,7 @@ import { openWithShell } from "./pime_config_tool";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
 import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
 import { defaultSettings, Settings } from "./pime_settings";
-import { candidateUi } from "./pime_ui";
+import { candidateUi, compositionHighlight } from "./pime_ui";
 
 
 /**
@@ -43,6 +43,11 @@ interface UiState {
   showMessage: any;
   /** Whether to hide the message. */
   hideMessage: boolean;
+  /**
+   * The part of the composition to draw as the target, `[start, end)` in
+   * code points: what the candidate window replaces.
+   */
+  compositionHighlight?: number[];
 }
 
 
@@ -292,6 +297,11 @@ class PimeMcBopomofo {
     this.inputController.setKeyboardLayout(this.settings.layout);
     this.inputController.setSelectPhrase(this.settings.select_phrase);
     this.inputController.setCandidateKeys(this.settings.candidate_keys);
+    // Up and Down move through a vertical candidate window, Left and Right
+    // through a horizontal one.
+    this.inputController.setUserVerticalCandidates(
+      this.settings.candidate_layout !== "horizontal",
+    );
     this.inputController.setCandidateKeysCount(
       this.settings.candidate_keys_count,
     );
@@ -503,6 +513,10 @@ class PimeMcBopomofo {
           showMessage: showMessage,
           hideMessage: hideMessage,
         };
+        const highlight = compositionHighlight(composingBuffer);
+        if (highlight) {
+          instance.uiState.compositionHighlight = highlight;
+        }
       },
     };
     return that;

@@ -89,7 +89,10 @@ function send(request) {
 
 // Windows virtual-key codes for the characters we type.
 const OEM = { ";": 186, "=": 187, ",": 188, "-": 189, ".": 190, "/": 191, "'": 222 };
+// Arrow keys and Esc, written as symbols in key sequences.
+const NAMED = { "←": 37, "↑": 38, "→": 39, "↓": 40, "⎋": 27 };
 function keyFor(ch) {
+  if (NAMED[ch]) return { keyCode: NAMED[ch], charCode: 0, named: true };
   if (ch === "\n") return { keyCode: 13, charCode: 13 };
   if (ch === " ") return { keyCode: 32, charCode: 32 };
   if (/[a-z]/.test(ch)) return { keyCode: ch.toUpperCase().charCodeAt(0), charCode: ch.charCodeAt(0) };
@@ -114,7 +117,12 @@ async function pressKey(base, edge, state) {
   if (!(await send(Object.assign({ method: filterMethod }, base))).return) return false;
   const r = await send(Object.assign({ method: onMethod }, base));
   if (r.commitString) state.committed += r.commitString;
-  if (typeof r.compositionString === "string") state.composing = r.compositionString;
+  if (typeof r.compositionString === "string") {
+    state.composing = r.compositionString;
+    state.highlight = r.compositionHighlight;
+  }
+  if (Array.isArray(r.candidateList)) state.candidates = r.candidateList;
+  if (typeof r.candidateCursor === "number") state.candidateCursor = r.candidateCursor;
   return true;
 }
 
@@ -133,7 +141,7 @@ async function typeKeys(text) {
     const keyStates = new Array(256).fill(0);
     if (k.shift) keyStates[VK_SHIFT] = 0x80;
     const base = { keyCode: k.keyCode, charCode: k.charCode, keyStates, scanCode: 0, repeatCount: 0, isExtended: false };
-    if (!(await pressKey(base, "down", state)) && ch !== "\n") {
+    if (!(await pressKey(base, "down", state)) && ch !== "\n" && !k.named) {
       state.committed += ch; // The app would receive the key itself.
     }
     await pressKey(base, "up", state);
@@ -191,6 +199,34 @@ async function main() {
     if (!ok) failures++;
     console.log(`${ok ? "PASS" : "FAIL"}  ${JSON.stringify(keys)} -> ${got}${ok ? "" : " (expected " + expected + ")"}`);
   }
+  // Fixing a character: ← moves onto 帶, ↓ opens its candidates. The window
+  // starts on 帶 (the list leads with 代), the text marks 帶 as the target,
+  // and ↓ moves to the next candidate in the vertical window.
+  {
+    const opened = await typeKeys("ru42k7294n03←↓");
+    const current = opened.candidates[opened.candidateCursor];
+    const ok1 =
+      opened.composing === "記得帶傘" &&
+      JSON.stringify(opened.highlight) === "[2,3]" &&
+      current === "帶";
+    if (!ok1) failures++;
+    console.log(
+      `${ok1 ? "PASS" : "FAIL"}  candidates open on ${JSON.stringify(current)}, target ${JSON.stringify(opened.highlight)}`
+    );
+    const moved = await typeKeys("↓");
+    const next = opened.candidates[opened.candidateCursor + 1];
+    const ok2 = moved.candidateCursor === opened.candidateCursor + 1 && JSON.stringify(moved.highlight) === "[2,3]";
+    if (!ok2) failures++;
+    console.log(
+      `${ok2 ? "PASS" : "FAIL"}  ↓ moves to ${JSON.stringify(next)} (cursor ${moved.candidateCursor})`
+    );
+    const closed = await typeKeys("⎋");
+    const ok3 = closed.highlight === undefined && closed.composing === "記得帶傘";
+    if (!ok3) failures++;
+    console.log(`${ok3 ? "PASS" : "FAIL"}  Esc closes the window and drops the target`);
+    await typeKeys("⎋");
+  }
+
   console.log(failures ? `${failures} failed` : `all passed${usePipe ? " (through the launcher)" : ""}`);
   return failures ? 1 : 0;
 }

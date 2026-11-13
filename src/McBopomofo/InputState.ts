@@ -117,7 +117,14 @@ export class ChoosingCandidate extends NotEmpty {
     /** The candidates to choose from. */
     readonly candidates: Candidate[],
     /** The index of the cursor when the user starts to choose for candidates. */
-    readonly originalCursorIndex: number
+    readonly originalCursorIndex: number,
+    /**
+     * The part of the composing buffer the candidates replace, shown
+     * highlighted (UTF-16 offsets, end exclusive).
+     */
+    readonly highlightRange?: { start: number; end: number },
+    /** The candidate the window starts on. */
+    readonly initialSelectedIndex: number = 0
   ) {
     super(buf, index);
   }

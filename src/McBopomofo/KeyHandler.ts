@@ -407,7 +407,9 @@ export class KeyHandler {
             view.text,
             view.cursorIndex,
             candidates,
-            view.cursorIndex
+            view.cursorIndex,
+            view.focusRange,
+            c.currentCandidateIndex(list)
           )
         );
         return true;

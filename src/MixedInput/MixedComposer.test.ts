@@ -135,6 +135,34 @@ describe("MixedComposer", () => {
     expect(c.moveFocus(-1)).toBe(false);
   });
 
+  test("the view marks the unit under the cursor", () => {
+    const c = composer();
+    type(c, "su3cl3check");
+    let v = c.view();
+    expect(v.text.slice(v.focusRange!.start, v.focusRange!.end)).toBe("check");
+    c.moveFocus(-1);
+    v = c.view();
+    expect(v.focusRange).toEqual({ start: 1, end: 2 });
+    expect(v.text.slice(v.focusRange!.start, v.focusRange!.end)).toBe(
+      v.text[1],
+    );
+  });
+
+  test("finds the candidate that is in the text now", () => {
+    const c = composer();
+    type(c, "294");
+    const list = c.candidates();
+    const now = c.view().text;
+    expect(list[c.currentCandidateIndex(list)].value).toBe(now);
+    const other = list.find(
+      (x) => x.kind === MixedCandidateKind.Phrase && x.value !== now,
+    )!;
+    c.selectCandidate(other);
+    // Choosing also moves the phrase up the list; either way the index follows.
+    const after = c.candidates();
+    expect(after[c.currentCandidateIndex(after)].value).toBe(other.value);
+  });
+
   test("backspace removes one key at a time", () => {
     const c = composer();
     type(c, "su3");
