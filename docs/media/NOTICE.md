@@ -36,6 +36,13 @@ Text is converted to Taiwan Traditional Chinese with OpenCC. Because of the
 Wikipedia share-alike terms, these derived files are licensed under CC BY-SA
 4.0. The file header states which sources a given build used.
 
+## Colloquial corpus
+
+`tools/mixed/corpus/colloquial.txt` (everyday Taiwanese Mandarin chat, one
+sentence per line) was written for this project with an AI assistant (Claude)
+and is released under the MIT license, like the code. The language model
+workflow adds it to the training text.
+
 ## Lookup dictionary
 
 `output/pime/lookup_dict.json`, which 框選查詢 (select text, tap Ctrl twice)
