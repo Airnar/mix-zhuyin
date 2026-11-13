@@ -33,6 +33,7 @@ import {
   openFileDialogScript,
   runPowerShell,
 } from "./pime_dialogs";
+import { guardedResponse, installCrashGuards } from "./pime_guard";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
 
 const ChineseConvert = require("chinese_convert");
@@ -999,6 +1000,470 @@ try {
   console.error(e);
 }
 
+/** Answers one request from the text service. */
+const respond = (request: any): any => {
+  const lastRequest = pimeMcBopomofo.lastRequest;
+  pimeMcBopomofo.lastRequest = request;
+  const responseTemplate = {
+    return: false,
+    success: true,
+    seqNum: request.seqNum,
+  };
+  if (request.method === "init") {
+    const { isWindows8Above } = request;
+    pimeMcBopomofo.isWindows8Above = isWindows8Above;
+    const response = Object.assign({}, responseTemplate);
+    return response;
+  }
+  if (request.method === "close") {
+    const response = Object.assign({}, responseTemplate, {});
+    return response;
+  }
+
+  if (request.method === "onActivate") {
+    const customUi = pimeMcBopomofo.customUiResponse();
+    const buttonUi = pimeMcBopomofo.buttonUiResponse();
+    pimeMcBopomofo.alreadyAddButton = true;
+    const response = Object.assign({}, responseTemplate, customUi, buttonUi);
+    return response;
+  }
+
+  if (request.method === "onDeactivate") {
+    const response = Object.assign({}, responseTemplate, {
+      removeButton: ["windows-mode-icon", "switch-lang", "settings"],
+    });
+    pimeMcBopomofo.alreadyAddButton = false;
+    return response;
+  }
+
+  if (request.method === "onPreservedKey") {
+    console.log(request);
+    const response = Object.assign({}, responseTemplate);
+    return response;
+  }
+
+  if (request.method === "filterKeyUp") {
+    // 框選查詢: the text service sends the selected text with Ctrl key ups.
+    if (
+      pimeMcBopomofo.ctrlTaps.keyUp(isCtrlKey(request.keyCode), Date.now())
+    ) {
+      const lookup = pimeMcBopomofo.lookupResponse(request.selectionText);
+      if (lookup) {
+        return Object.assign({}, responseTemplate, lookup, { return: false });
+      }
+    }
+    const state = pimeMcBopomofo.inputController.state;
+    let handled = state instanceof Empty === false;
+    if (
+      lastRequest &&
+      lastRequest.method === "filterKeyUp" &&
+      lastRequest.keyCode === request.keyCode
+    ) {
+      // NOTE: Some app, like MS Word, may send repeated key up event.
+      // We should ignore such events.
+      const response = Object.assign({}, responseTemplate, {
+        return: handled,
+      });
+      return response;
+    }
+
+    // Single Shift to toggle alphabet mode.
+    let uiState = {
+      commitString: "",
+      compositionString: "",
+      compositionCursor: 0,
+      showCandidates: false,
+      candidateList: [],
+      candidateCursor: 0,
+      showMessage: {},
+      hideMessage: true,
+    };
+
+    if (pimeMcBopomofo.isShiftHold && pimeMcBopomofo.isMixedShiftHold) {
+      // Claim the key up so PIME calls onKeyUp with an edit session: PIME
+      // ignores composition changes in filter* responses. The flip itself
+      // happens in onKeyUp, because TSF may filter the same key up twice.
+      const response = Object.assign({}, responseTemplate, {
+        return: true,
+      });
+      return response;
+    }
+
+    if (pimeMcBopomofo.isShiftHold) {
+      pimeMcBopomofo.toggleAlphabetMode();
+      // Note: Since we are toggling alphabet mode on key up event, we should
+      // update the icons here.
+      const customUi = pimeMcBopomofo.customUiResponse();
+      const buttonUi = pimeMcBopomofo.buttonUiResponse();
+      let response = Object.assign(
+        {},
+        responseTemplate,
+        customUi,
+        buttonUi,
+        uiState,
+        {
+          return: false,
+        },
+      );
+      // Note: We return false here so we can let the shift key event to be
+      // passeds to IntelliJ and then IntelliJ can trigger the action menu by
+      // the double shift key event.
+      return response;
+    }
+    let response = Object.assign({}, responseTemplate, {
+      return: handled,
+    });
+    return response;
+  }
+
+  if (request.method === "onKeyUp") {
+    if (
+      pimeMcBopomofo.isShiftHold &&
+      pimeMcBopomofo.isMixedShiftHold &&
+      request.keyCode === VK_Keys.VK_SHIFT
+    ) {
+      pimeMcBopomofo.isShiftHold = false;
+      pimeMcBopomofo.isMixedShiftHold = false;
+      pimeMcBopomofo.resetBeforeHandlingKey();
+      pimeMcBopomofo.inputController.mixedShiftTap();
+      const response = Object.assign(
+        {},
+        responseTemplate,
+        pimeMcBopomofo.uiState,
+        {
+          return: true,
+        },
+      );
+      return response;
+    }
+    if (pimeMcBopomofo.isShiftHold) {
+      let response = Object.assign({}, responseTemplate, {
+        return: false,
+      });
+      return response;
+    }
+  }
+
+  if (request.method === "filterKeyDown") {
+    pimeMcBopomofo.ctrlTaps.keyDown(isCtrlKey(request.keyCode), Date.now());
+    if (
+      lastRequest &&
+      lastRequest.method === "filterKeyDown" &&
+      lastRequest.keyCode === request.keyCode
+    ) {
+      // NOTE: Some app, like MS Word, may send repeated key down event.
+      // We should ignore such events.
+      const response = Object.assign({}, responseTemplate, {
+        return: true,
+      });
+      return response;
+    }
+
+    const { keyCode, charCode, keyStates } = request;
+
+    // AI keys: Ctrl+Enter while composing; Ctrl+E / Ctrl+R after a lookup;
+    // Enter / Esc for a rewrite.
+    const aiResponse = pimeMcBopomofo.ai.keyDown(
+      {
+        keyCode,
+        ctrl: (keyStates[VK_Keys.VK_CONTROL] & 0x80) !== 0,
+        shift: (keyStates[VK_Keys.VK_SHIFT] & 0x80) !== 0,
+        alt: (keyStates[VK_Keys.VK_MENU] & 0x80) !== 0,
+      },
+      Date.now(),
+    );
+    if (aiResponse) {
+      pimeMcBopomofo.isShiftHold = false;
+      pimeMcBopomofo.pendingAiResponse = aiResponse;
+      return Object.assign({}, responseTemplate, { return: true });
+    }
+
+    const key = KeyFromKeyboardEvent(
+      keyCode,
+      keyStates,
+      String.fromCharCode(charCode),
+      charCode,
+    );
+
+    // Handles special key combinations for toggling input settings:
+    // - Ctrl + Shift + G: Toggles Chinese conversion mode (between
+    //   traditional and simplified Chinese)
+    // - Ctrl + Shift + H: Toggles half-width punctuation mode
+    if (
+      key.ctrlPressed &&
+      key.shiftPressed &&
+      (key.ascii === "G" || key.ascii === "H")
+    ) {
+      pimeMcBopomofo.isShiftHold = false;
+      if (key.ascii === "G") {
+        pimeMcBopomofo.settings.chineseConversion =
+          !pimeMcBopomofo.settings.chineseConversion;
+      } else if (key.ascii === "H") {
+        pimeMcBopomofo.settings.half_width_punctuation =
+          !pimeMcBopomofo.settings.half_width_punctuation;
+      }
+      pimeMcBopomofo.applySettings();
+      pimeMcBopomofo.writeSettings();
+      pimeMcBopomofo.resetController();
+      pimeMcBopomofo.isLastFilterKeyDownHandled = true;
+
+      const customUi = pimeMcBopomofo.customUiResponse();
+      const buttonUi = pimeMcBopomofo.buttonUiResponse();
+
+      const response = Object.assign(
+        {},
+        responseTemplate,
+        customUi,
+        buttonUi,
+        {
+          return: true,
+        },
+      );
+      return response;
+    }
+
+    // Note: We only allow Shift key to toggle Alphabet/Chinese mode when the
+    // state is Empty.
+    let shouldHandleShift =
+      pimeMcBopomofo.settings.shift_key_toggle_alphabet_mode === true;
+    const state = pimeMcBopomofo.inputController.state;
+    if (state instanceof Empty === false) {
+      shouldHandleShift = false;
+    }
+    // In mixed mode, a Shift tap while composing flips the segment under
+    // the cursor between Chinese and English.
+    const isMixedComposing =
+      pimeMcBopomofo.inputController.mixedMode && state instanceof Inputting;
+    if (isMixedComposing) {
+      shouldHandleShift = true;
+    }
+
+    const isPressingShiftOnly = key.ascii === "Shift";
+
+    // Note: The way we detect if a user is trying to press a single Shift key
+    // to toggle Alphabet/Chinese mode, is to check if there is any key other
+    // than the Shift key is received before the key up event.
+    //
+    // We set isShiftHold to true here. It means the user is pressing Shift
+    // key only. Then, if there is any other key coming, we will reset
+    // isShiftHold. Finally, if isShiftHold is still true in the key up event,
+    // we will toggle Alphabet/Chinese.
+    if (shouldHandleShift && isPressingShiftOnly) {
+      pimeMcBopomofo.isShiftHold = true;
+      pimeMcBopomofo.isMixedShiftHold = isMixedComposing;
+      const response = Object.assign({}, responseTemplate, {
+        return: false,
+      });
+      return response;
+    } else {
+      pimeMcBopomofo.isShiftHold = false;
+      pimeMcBopomofo.isMixedShiftHold = false;
+    }
+
+    pimeMcBopomofo.resetBeforeHandlingKey();
+
+    if ((keyStates[VK_Keys.VK_CAPITAL] & 1) !== 0) {
+      // Ignores caps lock.
+      pimeMcBopomofo.resetController();
+      pimeMcBopomofo.isCapsLockHold = true;
+      pimeMcBopomofo.isLastFilterKeyDownHandled = false;
+      const response = Object.assign({}, responseTemplate, {
+        return: false,
+      });
+      return response;
+    } else {
+      pimeMcBopomofo.isCapsLockHold = false;
+    }
+
+    if (pimeMcBopomofo.isAlphabetMode) {
+      const response = Object.assign({}, responseTemplate, { return: false });
+      return response;
+    }
+
+    const handled = pimeMcBopomofo.inputController.mcbopomofoKeyEvent(key);
+    pimeMcBopomofo.isLastFilterKeyDownHandled = handled;
+    if (
+      pimeMcBopomofo.inputController.mixedMode &&
+      pimeMcBopomofo.uiState.commitString
+    ) {
+      pimeMcBopomofo.scheduleSaveMixedLearning();
+    }
+    const response = Object.assign({}, responseTemplate, {
+      return: handled,
+    });
+    return response;
+  }
+
+  if (request.method === "onKeyDown") {
+    const aiResponse = pimeMcBopomofo.pendingAiResponse;
+    if (aiResponse) {
+      pimeMcBopomofo.pendingAiResponse = undefined;
+      return Object.assign(
+        {},
+        responseTemplate,
+        aiResponse.withUiState ? pimeMcBopomofo.uiState : {},
+        aiResponse.fields,
+        { return: true },
+      );
+    }
+    // Ignore caps lock.
+    if (pimeMcBopomofo.isCapsLockHold) {
+      pimeMcBopomofo.resetController();
+      const response = Object.assign({}, responseTemplate, {
+        return: false,
+      });
+      return response;
+    }
+
+    if (
+      lastRequest &&
+      lastRequest.method === "onKeyDown" &&
+      lastRequest.keyCode === request.keyCode
+    ) {
+      // NOTE: Some app, like MS Word, may send repeated key up event.
+      // We should ignore such events.
+      const response = Object.assign({}, responseTemplate, {
+        return: true,
+      });
+      return response;
+    }
+    const uiState: any = pimeMcBopomofo.uiState;
+    let response = Object.assign({}, responseTemplate, uiState, {
+      return: pimeMcBopomofo.isLastFilterKeyDownHandled,
+    });
+    return response;
+  }
+
+  // The text service asks again for answers that arrive after a key (AI).
+  if (request.method === "onRefresh") {
+    const refreshed = pimeMcBopomofo.ai.refresh(Date.now());
+    return Object.assign(
+      {},
+      responseTemplate,
+      refreshed.withUiState ? pimeMcBopomofo.uiState : {},
+      refreshed.fields,
+    );
+  }
+
+  if (request.method === "onKeyboardStatusChanged") {
+    const { opened } = request;
+    pimeMcBopomofo.isOpened = opened;
+    pimeMcBopomofo.resetController();
+    const customUi = pimeMcBopomofo.customUiResponse();
+    const buttonUi = pimeMcBopomofo.buttonUiResponse();
+    const response = Object.assign({}, responseTemplate, customUi, buttonUi);
+    return response;
+  }
+
+  if (request.method === "onCompositionTerminated") {
+    pimeMcBopomofo.resetController();
+    const uiState = pimeMcBopomofo.uiState;
+    const customUi = pimeMcBopomofo.customUiResponse();
+    const buttonUi = pimeMcBopomofo.buttonUiResponse();
+    const response = Object.assign(
+      {},
+      responseTemplate,
+      uiState,
+      customUi,
+      buttonUi,
+    );
+    pimeMcBopomofo.resetBeforeHandlingKey();
+    return response;
+  }
+
+  if (request.method === "onCommand") {
+    const { id } = request;
+    pimeMcBopomofo.handleCommand(id);
+    const uiState = pimeMcBopomofo.uiState;
+    const customUi = pimeMcBopomofo.customUiResponse();
+    const buttonUi = pimeMcBopomofo.buttonUiResponse();
+    const response = Object.assign(
+      {},
+      responseTemplate,
+      uiState,
+      customUi,
+      buttonUi,
+    );
+    return response;
+  }
+
+  if (request.method === "onMenu") {
+    const menu = [
+      {
+        text: "混打注音網站",
+        id: PimeMcBopomofoCommand.OpenHomepage,
+      },
+      {
+        text: "問題回報",
+        id: PimeMcBopomofoCommand.OpenBugReport,
+      },
+      {
+        text: "輔助說明",
+        id: PimeMcBopomofoCommand.Help,
+      },
+      {},
+      {
+        text:
+          "簡繁模式：" +
+          (pimeMcBopomofo.settings.chineseConversion ? "簡體" : "繁體"),
+        id: PimeMcBopomofoCommand.ToggleChineseConversion,
+      },
+      {
+        text:
+          "標點模式：" +
+          (pimeMcBopomofo.settings.half_width_punctuation ? "半形" : "全形"),
+        id: PimeMcBopomofoCommand.ToggleHalfWidthPunctuation,
+      },
+      {},
+      {
+        text: "偏好設定 (&O)",
+        id: PimeMcBopomofoCommand.OpenOptions,
+      },
+      {
+        text: "編輯使用者詞庫 (&U)",
+        id: PimeMcBopomofoCommand.EditUserPhrase,
+      },
+      {
+        text: "匯入微軟注音詞彙…",
+        id: PimeMcBopomofoCommand.ImportMicrosoftPhrases,
+      },
+      {
+        text: "編輯快捷文字本 (&S)",
+        id: PimeMcBopomofoCommand.EditSnippets,
+      },
+      {
+        text: "用編輯器打開使用者詞庫",
+        id: PimeMcBopomofoCommand.OpenUserPhrase,
+      },
+      {
+        text: "用編輯器打開排除的詞彙",
+        id: PimeMcBopomofoCommand.OpenExcludedPhrase,
+      },
+      {
+        text: "打開使用者資料夾",
+        id: PimeMcBopomofoCommand.OpenMcBopomofoUserDataFolder,
+      },
+      {
+        text: "打開注音字體支援",
+        id: PimeMcBopomofoCommand.ToggleBpmfFontAnnotationSupport,
+        checked:
+          pimeMcBopomofo.settings.bopomofo_font_annotation_support_enabled,
+      },
+      {},
+      {
+        text: "混打注音 for PIME 0.2.0（基於小麥注音）",
+      },
+    ];
+    const response = Object.assign({}, responseTemplate, { return: menu });
+    return response;
+  }
+
+  return responseTemplate;
+};
+
+// Errors outside a request (timers, watchers, network) are logged, not fatal.
+installCrashGuards(process, (what, e) => console.error(what + ":", e));
+
 module.exports = {
   textReducer(_: any, preState: any) {
     // Note: textReducer and response are the pattern of NIME. Actually, PIME
@@ -1009,462 +1474,12 @@ module.exports = {
   },
 
   response(request: any, _: any) {
-    const lastRequest = pimeMcBopomofo.lastRequest;
-    pimeMcBopomofo.lastRequest = request;
-    const responseTemplate = {
-      return: false,
-      success: true,
-      seqNum: request.seqNum,
-    };
-    if (request.method === "init") {
-      const { isWindows8Above } = request;
-      pimeMcBopomofo.isWindows8Above = isWindows8Above;
-      const response = Object.assign({}, responseTemplate);
-      return response;
-    }
-    if (request.method === "close") {
-      const response = Object.assign({}, responseTemplate, {});
-      return response;
-    }
-
-    if (request.method === "onActivate") {
-      const customUi = pimeMcBopomofo.customUiResponse();
-      const buttonUi = pimeMcBopomofo.buttonUiResponse();
-      pimeMcBopomofo.alreadyAddButton = true;
-      const response = Object.assign({}, responseTemplate, customUi, buttonUi);
-      return response;
-    }
-
-    if (request.method === "onDeactivate") {
-      const response = Object.assign({}, responseTemplate, {
-        removeButton: ["windows-mode-icon", "switch-lang", "settings"],
-      });
-      pimeMcBopomofo.alreadyAddButton = false;
-      return response;
-    }
-
-    if (request.method === "onPreservedKey") {
-      console.log(request);
-      const response = Object.assign({}, responseTemplate);
-      return response;
-    }
-
-    if (request.method === "filterKeyUp") {
-      // 框選查詢: the text service sends the selected text with Ctrl key ups.
-      if (
-        pimeMcBopomofo.ctrlTaps.keyUp(isCtrlKey(request.keyCode), Date.now())
-      ) {
-        const lookup = pimeMcBopomofo.lookupResponse(request.selectionText);
-        if (lookup) {
-          return Object.assign({}, responseTemplate, lookup, { return: false });
-        }
-      }
-      const state = pimeMcBopomofo.inputController.state;
-      let handled = state instanceof Empty === false;
-      if (
-        lastRequest &&
-        lastRequest.method === "filterKeyUp" &&
-        lastRequest.keyCode === request.keyCode
-      ) {
-        // NOTE: Some app, like MS Word, may send repeated key up event.
-        // We should ignore such events.
-        const response = Object.assign({}, responseTemplate, {
-          return: handled,
-        });
-        return response;
-      }
-
-      // Single Shift to toggle alphabet mode.
-      let uiState = {
-        commitString: "",
-        compositionString: "",
-        compositionCursor: 0,
-        showCandidates: false,
-        candidateList: [],
-        candidateCursor: 0,
-        showMessage: {},
-        hideMessage: true,
-      };
-
-      if (pimeMcBopomofo.isShiftHold && pimeMcBopomofo.isMixedShiftHold) {
-        // Claim the key up so PIME calls onKeyUp with an edit session: PIME
-        // ignores composition changes in filter* responses. The flip itself
-        // happens in onKeyUp, because TSF may filter the same key up twice.
-        const response = Object.assign({}, responseTemplate, {
-          return: true,
-        });
-        return response;
-      }
-
-      if (pimeMcBopomofo.isShiftHold) {
-        pimeMcBopomofo.toggleAlphabetMode();
-        // Note: Since we are toggling alphabet mode on key up event, we should
-        // update the icons here.
-        const customUi = pimeMcBopomofo.customUiResponse();
-        const buttonUi = pimeMcBopomofo.buttonUiResponse();
-        let response = Object.assign(
-          {},
-          responseTemplate,
-          customUi,
-          buttonUi,
-          uiState,
-          {
-            return: false,
-          },
-        );
-        // Note: We return false here so we can let the shift key event to be
-        // passeds to IntelliJ and then IntelliJ can trigger the action menu by
-        // the double shift key event.
-        return response;
-      }
-      let response = Object.assign({}, responseTemplate, {
-        return: handled,
-      });
-      return response;
-    }
-
-    if (request.method === "onKeyUp") {
-      if (
-        pimeMcBopomofo.isShiftHold &&
-        pimeMcBopomofo.isMixedShiftHold &&
-        request.keyCode === VK_Keys.VK_SHIFT
-      ) {
-        pimeMcBopomofo.isShiftHold = false;
-        pimeMcBopomofo.isMixedShiftHold = false;
-        pimeMcBopomofo.resetBeforeHandlingKey();
-        pimeMcBopomofo.inputController.mixedShiftTap();
-        const response = Object.assign(
-          {},
-          responseTemplate,
-          pimeMcBopomofo.uiState,
-          {
-            return: true,
-          },
-        );
-        return response;
-      }
-      if (pimeMcBopomofo.isShiftHold) {
-        let response = Object.assign({}, responseTemplate, {
-          return: false,
-        });
-        return response;
-      }
-    }
-
-    if (request.method === "filterKeyDown") {
-      pimeMcBopomofo.ctrlTaps.keyDown(isCtrlKey(request.keyCode), Date.now());
-      if (
-        lastRequest &&
-        lastRequest.method === "filterKeyDown" &&
-        lastRequest.keyCode === request.keyCode
-      ) {
-        // NOTE: Some app, like MS Word, may send repeated key down event.
-        // We should ignore such events.
-        const response = Object.assign({}, responseTemplate, {
-          return: true,
-        });
-        return response;
-      }
-
-      const { keyCode, charCode, keyStates } = request;
-
-      // AI keys: Ctrl+Enter while composing; Ctrl+E / Ctrl+R after a lookup;
-      // Enter / Esc for a rewrite.
-      const aiResponse = pimeMcBopomofo.ai.keyDown(
-        {
-          keyCode,
-          ctrl: (keyStates[VK_Keys.VK_CONTROL] & 0x80) !== 0,
-          shift: (keyStates[VK_Keys.VK_SHIFT] & 0x80) !== 0,
-          alt: (keyStates[VK_Keys.VK_MENU] & 0x80) !== 0,
-        },
-        Date.now(),
-      );
-      if (aiResponse) {
-        pimeMcBopomofo.isShiftHold = false;
-        pimeMcBopomofo.pendingAiResponse = aiResponse;
-        return Object.assign({}, responseTemplate, { return: true });
-      }
-
-      const key = KeyFromKeyboardEvent(
-        keyCode,
-        keyStates,
-        String.fromCharCode(charCode),
-        charCode,
-      );
-
-      // Handles special key combinations for toggling input settings:
-      // - Ctrl + Shift + G: Toggles Chinese conversion mode (between
-      //   traditional and simplified Chinese)
-      // - Ctrl + Shift + H: Toggles half-width punctuation mode
-      if (
-        key.ctrlPressed &&
-        key.shiftPressed &&
-        (key.ascii === "G" || key.ascii === "H")
-      ) {
-        pimeMcBopomofo.isShiftHold = false;
-        if (key.ascii === "G") {
-          pimeMcBopomofo.settings.chineseConversion =
-            !pimeMcBopomofo.settings.chineseConversion;
-        } else if (key.ascii === "H") {
-          pimeMcBopomofo.settings.half_width_punctuation =
-            !pimeMcBopomofo.settings.half_width_punctuation;
-        }
-        pimeMcBopomofo.applySettings();
-        pimeMcBopomofo.writeSettings();
-        pimeMcBopomofo.resetController();
-        pimeMcBopomofo.isLastFilterKeyDownHandled = true;
-
-        const customUi = pimeMcBopomofo.customUiResponse();
-        const buttonUi = pimeMcBopomofo.buttonUiResponse();
-
-        const response = Object.assign(
-          {},
-          responseTemplate,
-          customUi,
-          buttonUi,
-          {
-            return: true,
-          },
-        );
-        return response;
-      }
-
-      // Note: We only allow Shift key to toggle Alphabet/Chinese mode when the
-      // state is Empty.
-      let shouldHandleShift =
-        pimeMcBopomofo.settings.shift_key_toggle_alphabet_mode === true;
-      const state = pimeMcBopomofo.inputController.state;
-      if (state instanceof Empty === false) {
-        shouldHandleShift = false;
-      }
-      // In mixed mode, a Shift tap while composing flips the segment under
-      // the cursor between Chinese and English.
-      const isMixedComposing =
-        pimeMcBopomofo.inputController.mixedMode && state instanceof Inputting;
-      if (isMixedComposing) {
-        shouldHandleShift = true;
-      }
-
-      const isPressingShiftOnly = key.ascii === "Shift";
-
-      // Note: The way we detect if a user is trying to press a single Shift key
-      // to toggle Alphabet/Chinese mode, is to check if there is any key other
-      // than the Shift key is received before the key up event.
-      //
-      // We set isShiftHold to true here. It means the user is pressing Shift
-      // key only. Then, if there is any other key coming, we will reset
-      // isShiftHold. Finally, if isShiftHold is still true in the key up event,
-      // we will toggle Alphabet/Chinese.
-      if (shouldHandleShift && isPressingShiftOnly) {
-        pimeMcBopomofo.isShiftHold = true;
-        pimeMcBopomofo.isMixedShiftHold = isMixedComposing;
-        const response = Object.assign({}, responseTemplate, {
-          return: false,
-        });
-        return response;
-      } else {
-        pimeMcBopomofo.isShiftHold = false;
-        pimeMcBopomofo.isMixedShiftHold = false;
-      }
-
-      pimeMcBopomofo.resetBeforeHandlingKey();
-
-      if ((keyStates[VK_Keys.VK_CAPITAL] & 1) !== 0) {
-        // Ignores caps lock.
-        pimeMcBopomofo.resetController();
-        pimeMcBopomofo.isCapsLockHold = true;
-        pimeMcBopomofo.isLastFilterKeyDownHandled = false;
-        const response = Object.assign({}, responseTemplate, {
-          return: false,
-        });
-        return response;
-      } else {
-        pimeMcBopomofo.isCapsLockHold = false;
-      }
-
-      if (pimeMcBopomofo.isAlphabetMode) {
-        const response = Object.assign({}, responseTemplate, { return: false });
-        return response;
-      }
-
-      const handled = pimeMcBopomofo.inputController.mcbopomofoKeyEvent(key);
-      pimeMcBopomofo.isLastFilterKeyDownHandled = handled;
-      if (
-        pimeMcBopomofo.inputController.mixedMode &&
-        pimeMcBopomofo.uiState.commitString
-      ) {
-        pimeMcBopomofo.scheduleSaveMixedLearning();
-      }
-      const response = Object.assign({}, responseTemplate, {
-        return: handled,
-      });
-      return response;
-    }
-
-    if (request.method === "onKeyDown") {
-      const aiResponse = pimeMcBopomofo.pendingAiResponse;
-      if (aiResponse) {
-        pimeMcBopomofo.pendingAiResponse = undefined;
-        return Object.assign(
-          {},
-          responseTemplate,
-          aiResponse.withUiState ? pimeMcBopomofo.uiState : {},
-          aiResponse.fields,
-          { return: true },
-        );
-      }
-      // Ignore caps lock.
-      if (pimeMcBopomofo.isCapsLockHold) {
-        pimeMcBopomofo.resetController();
-        const response = Object.assign({}, responseTemplate, {
-          return: false,
-        });
-        return response;
-      }
-
-      if (
-        lastRequest &&
-        lastRequest.method === "onKeyDown" &&
-        lastRequest.keyCode === request.keyCode
-      ) {
-        // NOTE: Some app, like MS Word, may send repeated key up event.
-        // We should ignore such events.
-        const response = Object.assign({}, responseTemplate, {
-          return: true,
-        });
-        return response;
-      }
-      const uiState: any = pimeMcBopomofo.uiState;
-      let response = Object.assign({}, responseTemplate, uiState, {
-        return: pimeMcBopomofo.isLastFilterKeyDownHandled,
-      });
-      return response;
-    }
-
-    // The text service asks again for answers that arrive after a key (AI).
-    if (request.method === "onRefresh") {
-      const refreshed = pimeMcBopomofo.ai.refresh(Date.now());
-      return Object.assign(
-        {},
-        responseTemplate,
-        refreshed.withUiState ? pimeMcBopomofo.uiState : {},
-        refreshed.fields,
-      );
-    }
-
-    if (request.method === "onKeyboardStatusChanged") {
-      const { opened } = request;
-      pimeMcBopomofo.isOpened = opened;
+    // A throw here would end node, and the input method's icon and menu
+    // with it; answer "not handled" and start the composition over.
+    return guardedResponse(request, respond, (e, req) => {
+      console.error("Failed to handle " + req?.method + ":", e);
+      pimeMcBopomofo.pendingAiResponse = undefined;
       pimeMcBopomofo.resetController();
-      const customUi = pimeMcBopomofo.customUiResponse();
-      const buttonUi = pimeMcBopomofo.buttonUiResponse();
-      const response = Object.assign({}, responseTemplate, customUi, buttonUi);
-      return response;
-    }
-
-    if (request.method === "onCompositionTerminated") {
-      pimeMcBopomofo.resetController();
-      const uiState = pimeMcBopomofo.uiState;
-      const customUi = pimeMcBopomofo.customUiResponse();
-      const buttonUi = pimeMcBopomofo.buttonUiResponse();
-      const response = Object.assign(
-        {},
-        responseTemplate,
-        uiState,
-        customUi,
-        buttonUi,
-      );
-      pimeMcBopomofo.resetBeforeHandlingKey();
-      return response;
-    }
-
-    if (request.method === "onCommand") {
-      const { id } = request;
-      pimeMcBopomofo.handleCommand(id);
-      const uiState = pimeMcBopomofo.uiState;
-      const customUi = pimeMcBopomofo.customUiResponse();
-      const buttonUi = pimeMcBopomofo.buttonUiResponse();
-      const response = Object.assign(
-        {},
-        responseTemplate,
-        uiState,
-        customUi,
-        buttonUi,
-      );
-      return response;
-    }
-
-    if (request.method === "onMenu") {
-      const menu = [
-        {
-          text: "混打注音網站",
-          id: PimeMcBopomofoCommand.OpenHomepage,
-        },
-        {
-          text: "問題回報",
-          id: PimeMcBopomofoCommand.OpenBugReport,
-        },
-        {
-          text: "輔助說明",
-          id: PimeMcBopomofoCommand.Help,
-        },
-        {},
-        {
-          text:
-            "簡繁模式：" +
-            (pimeMcBopomofo.settings.chineseConversion ? "簡體" : "繁體"),
-          id: PimeMcBopomofoCommand.ToggleChineseConversion,
-        },
-        {
-          text:
-            "標點模式：" +
-            (pimeMcBopomofo.settings.half_width_punctuation ? "半形" : "全形"),
-          id: PimeMcBopomofoCommand.ToggleHalfWidthPunctuation,
-        },
-        {},
-        {
-          text: "偏好設定 (&O)",
-          id: PimeMcBopomofoCommand.OpenOptions,
-        },
-        {
-          text: "編輯使用者詞庫 (&U)",
-          id: PimeMcBopomofoCommand.EditUserPhrase,
-        },
-        {
-          text: "匯入微軟注音詞彙…",
-          id: PimeMcBopomofoCommand.ImportMicrosoftPhrases,
-        },
-        {
-          text: "編輯快捷文字本 (&S)",
-          id: PimeMcBopomofoCommand.EditSnippets,
-        },
-        {
-          text: "用編輯器打開使用者詞庫",
-          id: PimeMcBopomofoCommand.OpenUserPhrase,
-        },
-        {
-          text: "用編輯器打開排除的詞彙",
-          id: PimeMcBopomofoCommand.OpenExcludedPhrase,
-        },
-        {
-          text: "打開使用者資料夾",
-          id: PimeMcBopomofoCommand.OpenMcBopomofoUserDataFolder,
-        },
-        {
-          text: "打開注音字體支援",
-          id: PimeMcBopomofoCommand.ToggleBpmfFontAnnotationSupport,
-          checked:
-            pimeMcBopomofo.settings.bopomofo_font_annotation_support_enabled,
-        },
-        {},
-        {
-          text: "混打注音 for PIME 0.2.0（基於小麥注音）",
-        },
-      ];
-      const response = Object.assign({}, responseTemplate, { return: menu });
-      return response;
-    }
-
-    return responseTemplate;
+    });
   },
 };

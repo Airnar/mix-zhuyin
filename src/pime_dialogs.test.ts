@@ -42,6 +42,7 @@ describe("PowerShell dialogs", () => {
       child.stderr = new EventEmitter();
       const written: string[] = [];
       child.stdin = {
+        on: () => undefined,
         end: (text: string) => {
           written.push(text);
           setImmediate(() => {
@@ -66,5 +67,19 @@ describe("PowerShell dialogs", () => {
     const failed = fake(1, "", "Access denied");
     spawn.mockReturnValueOnce(failed.child);
     await expect(runPowerShell("x")).rejects.toThrow("Access denied");
+  });
+
+  test("a broken stdin rejects instead of crashing the backend", async () => {
+    const { EventEmitter } = jest.requireActual("events");
+    const spawn = child_process.spawn as unknown as jest.Mock;
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = new EventEmitter();
+    // PowerShell went away before reading what we wrote.
+    child.stdin.end = () =>
+      setImmediate(() => child.stdin.emit("error", new Error("write EPIPE")));
+    spawn.mockReturnValueOnce(child);
+    await expect(runPowerShell("x", "secret")).rejects.toThrow("EPIPE");
   });
 });

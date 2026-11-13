@@ -79,6 +79,9 @@ export const runPowerShell = (script: string, input = ""): Promise<string> =>
     child.stdout.on("data", (chunk: Buffer) => out.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
     child.on("error", reject);
+    // Writing to a PowerShell that already quit fails with EPIPE; without a
+    // listener that error would end the backend.
+    child.stdin.on("error", reject);
     child.on("close", (code: number) => {
       if (code !== 0) {
         reject(
