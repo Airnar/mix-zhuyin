@@ -69,7 +69,8 @@ def clean_meanings(raw):
         if "|" in gloss or "[" in gloss:
             continue
         meanings.append(gloss)
-    return meanings
+    # Taiwan senses first: 軟體 is software here, not soft-bodied.
+    return sorted(meanings, key=lambda g: 0 if "(Tw)" in g else 1)
 
 
 def english_keys(meaning):
@@ -114,22 +115,32 @@ def main():
                 if meaning not in kept:
                     kept.append(meaning)
 
+    # English word -> {Chinese word: the earliest sense it was found in}.
     en = {}
     for trad, meanings in zh.items():
         if trad not in scores:
             continue
-        for meaning in meanings:
-            for key in english_keys(meaning):
-                en.setdefault(key, set()).add(trad)
+        for sense, meaning in enumerate(meanings):
+            for key in english_keys(meaning.replace("(Tw)", "")):
+                words = en.setdefault(key, {})
+                words[trad] = min(sense, words.get(trad, sense))
 
-    def rank(word):
-        return (-scores.get(word, -99.0), len(word))
+    def ranked(words):
+        # Words whose main sense this is first, then whole words before
+        # single characters, then the more common.
+        return sorted(
+            words,
+            key=lambda w: (words[w], len(w) == 1, -scores.get(w, -99.0), len(w)),
+        )
 
     out = {
         "source": "CC-CEDICT (CC BY-SA 4.0), filtered with McBopomofo's dictionary",
-        "zh": {k: v[: args.meanings] for k, v in sorted(zh.items())},
+        "zh": {
+            k: [g.replace("(Tw) ", "").replace("(Tw)", "") for g in v[: args.meanings]]
+            for k, v in sorted(zh.items())
+        },
         "en": {
-            k: sorted(v, key=rank)[: args.words_per_english]
+            k: ranked(v)[: args.words_per_english]
             for k, v in sorted(en.items())
         },
     }
