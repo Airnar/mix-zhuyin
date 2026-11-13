@@ -8,6 +8,8 @@ name: Windows installer
 on:
   push:
     branches: [main]
+    # A version tag (v0.1.0) builds, tests and publishes a release.
+    tags: ["v*"]
     paths:
       - "src/**"
       - "output/pime/**"
@@ -132,3 +134,32 @@ jobs:
         run: |
           windows/e2e/check_addon_removed.ps1
           windows/e2e/check_install.ps1
+
+  release:
+    needs: [build, clean-install, replace-addon]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check the tag matches ime.json
+        run: |
+          version=$(node -p "require('./output/pime/ime.json').version")
+          if [ "v$version" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match ime.json version $version"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: MixZhuyin-setup
+          path: setup
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          gh release create "${GITHUB_REF_NAME}" setup/*.exe \
+            --title "混打注音 ${GITHUB_REF_NAME}" \
+            --notes-file "$notes" \
+            --verify-tag
