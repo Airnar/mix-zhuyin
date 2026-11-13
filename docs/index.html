@@ -150,7 +150,7 @@
 <h3 id="ai-助手（本機＋你自己的雲端）" class="tsd-anchor-link">AI 助手（本機＋你自己的雲端）<a href="#ai-助手（本機＋你自己的雲端）" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>AI 功能預設關閉，只有按 Ctrl+Enter、Ctrl+E、Ctrl+R 時才會問 AI，密碼欄永遠不會。每個功能可以各自選用本機或雲端，例如修正整句用本機、解釋和改寫用雲端。</p>
 <ul>
-<li><strong>本機 AI</strong>：安裝 <a href="https://ollama.com">Ollama</a>，下載中文模型（<code>ollama pull qwen2.5:7b</code>）。文字不會離開電腦，也不用額度。</li>
+<li><strong>本機 AI</strong>：安裝 <a href="https://ollama.com">Ollama</a>，下載中文模型（<code>ollama pull qwen2.5:7b</code>）。文字不會離開電腦，也不用額度。沒有獨立顯示卡時每次約 10 秒，模型閒置後第一次要多等約 20 秒載入；回答若是簡體字會自動轉成正體。</li>
 <li><strong>雲端 AI</strong>：可選 Claude、OpenAI、Google Gemini，或任何 OpenAI 相容的服務，用你自己的 API 金鑰，費用由你的帳號支付。金鑰用 Windows DPAPI 加密存在這台電腦，設定檔裡沒有明碼，只有你的 Windows 帳號解得開。</li>
 </ul>
 <p>設定：偏好設定 →「AI 助手」打開，再到「本機 AI」「雲端 AI」兩區填模型和金鑰。</p>
