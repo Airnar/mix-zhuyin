@@ -370,6 +370,27 @@ void TextService::showMessage(Ime::EditSession* session, std::wstring message, i
 	messageTimerId_ = ::SetTimer(messageWindow_->hwnd(), 1, duration * 1000, (TIMERPROC)TextService::onMessageTimeout);
 }
 
+void TextService::showLookup(std::wstring message, int duration) {
+	hideMessage();
+	messageWindow_ = make_unique<Ime::MessageWindow>(this, nullptr);
+	messageWindow_->setFont(font_);
+	messageWindow_->setText(message);
+
+	RECT rc;
+	if (selectionTextRect(&rc)) {
+		messageWindow_->moveNearText(rc);
+	}
+	else {
+		POINT pt = {};
+		::GetCursorPos(&pt);
+		RECT cursor = {pt.x, pt.y, pt.x + 1, pt.y + 16};
+		messageWindow_->moveNearText(cursor);
+	}
+	messageWindow_->show();
+
+	messageTimerId_ = ::SetTimer(messageWindow_->hwnd(), 1, duration * 1000, (TIMERPROC)TextService::onMessageTimeout);
+}
+
 void TextService::updateMessageWindow(Ime::EditSession* session) {
     if (messageWindow_) {
         RECT textRect;

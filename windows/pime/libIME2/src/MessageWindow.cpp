@@ -26,7 +26,8 @@ namespace Ime {
 MessageWindow::MessageWindow(TextService* service, EditSession* session):
     ImeWindow(service) {
 
-    HWND parent = service->compositionWindow(session);
+    // Without an edit session (a lookup popup), the focused window owns it.
+    HWND parent = session ? service->compositionWindow(session) : ::GetFocus();
     create(parent, WS_POPUP|WS_CLIPCHILDREN, WS_EX_TOOLWINDOW|WS_EX_TOPMOST);
     initFrame();
 }
@@ -36,17 +37,20 @@ MessageWindow::~MessageWindow(void) {
 
 // virtual
 void MessageWindow::recalculateSize() {
-    SIZE size = {0};
     HDC dc = GetDC(hwnd_);
     HGDIOBJ old_font = SelectObject(dc, font_);
-    GetTextExtentPointW(dc, text_.c_str(), text_.length(), &size);
+    // Messages may have several lines (lookup results); long lines wrap.
+    RECT text = {0, 0, scaleForDpi(dc, 420), 0};
+    DrawTextW(dc, text_.c_str(), (int)text_.length(), &text,
+        DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX | DT_EXPANDTABS);
     int padX = scaleForDpi(dc, 10);
     int padY = scaleForDpi(dc, 5);
     SelectObject(dc, old_font);
     ReleaseDC(hwnd_, dc);
 
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0,
-        size.cx + padX * 2, size.cy + padY * 2, SWP_NOACTIVATE|SWP_NOMOVE);
+        (text.right - text.left) + padX * 2, (text.bottom - text.top) + padY * 2,
+        SWP_NOACTIVATE|SWP_NOMOVE);
 }
 
 void MessageWindow::setText(std::wstring text) {
@@ -86,7 +90,9 @@ void MessageWindow::onPaint(PAINTSTRUCT& ps) {
 
     SetBkMode(hDC, TRANSPARENT);
     SetTextColor(hDC, theme.text);
-    DrawTextW(hDC, text_.c_str(), len, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+    RECT text = rc;
+    InflateRect(&text, -scaleForDpi(hDC, 10), -scaleForDpi(hDC, 5));
+    DrawTextW(hDC, text_.c_str(), len, &text, DT_WORDBREAK | DT_NOPREFIX | DT_EXPANDTABS);
 
     SelectObject(hDC, oldFont);
 }

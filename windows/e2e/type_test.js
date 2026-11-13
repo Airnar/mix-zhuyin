@@ -234,6 +234,29 @@ async function main() {
     await typeKeys("⎋");
   }
 
+  // 框選查詢: Ctrl tapped twice with text selected shows how it reads. The
+  // text service sends the selection with Ctrl key ups, and the popup comes
+  // back as showLookup on a filterKeyUp.
+  {
+    const VK_CONTROL = 17;
+    let lookup;
+    for (let tap = 0; tap < 2; tap++) {
+      const down = new Array(256).fill(0);
+      down[VK_CONTROL] = 0x80;
+      const key = { keyCode: VK_CONTROL, charCode: 0, scanCode: 0, repeatCount: 0, isExtended: false };
+      for (let i = 0; i < 2; i++) await send(Object.assign({ method: "filterKeyDown", keyStates: down }, key));
+      for (let i = 0; i < 2; i++) {
+        const r = await send(
+          Object.assign({ method: "filterKeyUp", keyStates: new Array(256).fill(0), selectionText: "銀行" }, key)
+        );
+        if (r.showLookup) lookup = r.showLookup;
+      }
+    }
+    const ok = !!lookup && lookup.message.startsWith("銀行　ㄧㄣˊ ㄏㄤˊ");
+    if (!ok) failures++;
+    console.log(`${ok ? "PASS" : "FAIL"}  Ctrl twice on 銀行 -> ${JSON.stringify(lookup)}`);
+  }
+
   // Text snippets: ` and Space list them, a candidate key commits one. Only
   // runs when the user has no snippets of their own, and puts the file back.
   {

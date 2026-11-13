@@ -1,0 +1,49 @@
+name: Build lookup dictionary
+
+# Builds output/pime/lookup_dict.json, the dictionary 框選查詢 (select text,
+# tap Ctrl twice) shows meanings from, from CC-CEDICT, and pushes it to a
+# branch named data/lookup-<run number> for review.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download CC-CEDICT
+        run: >
+          curl -fsSL --retry 3 -o cedict.txt.gz
+          https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz
+
+      - name: Build
+        run: |
+          python3 tools/mixed/build_lookup_dict.py \
+            --cedict cedict.txt.gz \
+            --webdata src/McBopomofo/WebData.ts \
+            --output output/pime/lookup_dict.json | tee -a "$GITHUB_STEP_SUMMARY"
+          ls -l output/pime/lookup_dict.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push the dictionary to a branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version="$(zcat cedict.txt.gz | grep -m1 '^#! date=' || true)"
+          branch="data/lookup-${{ github.run_number }}"
+          git checkout -b "$branch"
+          git add output/pime/lookup_dict.json
+          git commit -q \
+            -m "feat: build the lookup dictionary (run ${{ github.run_number }})" \
+            -m "From CC-CEDICT ${version#\#! }, filtered with McBopomofo's dictionary." \
+            -m "Built by tools/mixed/build_lookup_dict.py; CC BY-SA 4.0."
+          git push origin "$branch"

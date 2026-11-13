@@ -89,6 +89,18 @@ void Client::addKeyEventToRpcRequest(json& request, Ime::KeyEvent& keyEvent) {
 	request["keyStates"] = keyStates;
 }
 
+// The selected text, sent with Ctrl key ups so the backend can look it up
+// when Ctrl is tapped twice (框選查詢).
+void Client::addSelectionTextToRpcRequest(json& request, Ime::KeyEvent& keyEvent) {
+	if (keyEvent.keyCode() != VK_CONTROL) {
+		return;
+	}
+	const std::wstring& text = textService_->selectionText();
+	if (!text.empty()) {
+		request["selectionText"] = utf16ToUtf8(text.c_str());
+	}
+}
+
 bool Client::handleRpcResponse(json& msg, Ime::EditSession* session) {
 	// A failed RPC call leaves msg as null, and jsonValueOr is noexcept.
 	if (!msg.is_object()) {
@@ -149,6 +161,16 @@ void Client::updateMessageWindow(json& msg, Ime::EditSession* session, bool& end
 	auto& hideMessageVal = msg["hideMessage"];
 	if (hideMessageVal.is_boolean() && hideMessageVal.get<bool>()) {
 		textService_->hideMessage();
+	}
+
+	// lookup popup (框選查詢); works without an edit session
+	auto& showLookupVal = msg["showLookup"];
+	if (showLookupVal.is_object()) {
+		auto& message = showLookupVal["message"];
+		auto& duration = showLookupVal["duration"];
+		if (message.is_string() && duration.is_number_integer()) {
+			textService_->showLookup(utf8ToUtf16(message.get<string>().c_str()), duration.get<int>());
+		}
 	}
 }
 
@@ -482,6 +504,7 @@ bool Client::filterKeyUp(Ime::KeyEvent& keyEvent) {
 
 	json req = createRpcRequest("filterKeyUp");
 	addKeyEventToRpcRequest(req, keyEvent);
+	addSelectionTextToRpcRequest(req, keyEvent);
 
 	json ret;
 	callRpcMethod(req, ret);
@@ -498,6 +521,7 @@ bool Client::onKeyUp(Ime::KeyEvent& keyEvent, Ime::EditSession* session) {
 
 	json req = createRpcRequest("onKeyUp");
 	addKeyEventToRpcRequest(req, keyEvent);
+	addSelectionTextToRpcRequest(req, keyEvent);
 
 	json ret;
 	callRpcMethod(req, ret);

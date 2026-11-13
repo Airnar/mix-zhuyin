@@ -45,7 +45,9 @@ TextService::TextService(ImeModule* module):
     clientId_(TF_CLIENTID_NULL),
     activateFlags_(0),
     isKeyboardOpened_(false),
-    langBarSinkCookie_(TF_INVALID_COOKIE) {
+    langBarSinkCookie_(TF_INVALID_COOKIE),
+    selectionTextRect_{},
+    hasSelectionTextRect_(false) {
 
 }
 
@@ -800,6 +802,54 @@ bool TextService::shouldPassKeysThrough(ITfContext* context) {
     return isKeyboardDisabled(context) || !isKeyboardOpened() || isPasswordField(context);
 }
 
+bool TextService::selectionTextRect(RECT* rect) const {
+    if (!hasSelectionTextRect_) {
+        return false;
+    }
+    *rect = selectionTextRect_;
+    return true;
+}
+
+void TextService::readSelectionText(ITfContext* context, WPARAM keyCode) {
+    selectionText_.clear();
+    hasSelectionTextRect_ = false;
+    if (keyCode != VK_CONTROL || !context || isComposing()) {
+        return;
+    }
+    auto session = ComPtr<EditSession>::make(
+        context,
+        [&](EditSession* session, TfEditCookie cookie) {
+            TF_SELECTION selection = {};
+            ULONG fetched = 0;
+            if (context->GetSelection(cookie, TF_DEFAULT_SELECTION, 1, &selection, &fetched) != S_OK || fetched == 0) {
+                return;
+            }
+            ITfRange* selectionRange = selection.range;
+            auto range = ComPtr<ITfRange>::takeover(std::move(selectionRange));
+            BOOL empty = TRUE;
+            if (range->IsEmpty(cookie, &empty) != S_OK || empty) {
+                return;
+            }
+            // Enough for a word or a sentence; longer selections are cut.
+            wchar_t buffer[257];
+            ULONG length = 0;
+            if (range->GetText(cookie, 0, buffer, 256, &length) != S_OK) {
+                return;
+            }
+            selectionText_.assign(buffer, length);
+            ComPtr<ITfContextView> view;
+            if (context->GetActiveView(&view) == S_OK) {
+                BOOL clipped = FALSE;
+                if (view->GetTextExt(cookie, range, &selectionTextRect_, &clipped) == S_OK) {
+                    hasSelectionTextRect_ = true;
+                }
+            }
+        }
+    );
+    HRESULT sessionResult;
+    context->RequestEditSession(clientId_, session, TF_ES_SYNC | TF_ES_READ, &sessionResult);
+}
+
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) {
     if (shouldPassKeysThrough(pContext)) {
         *pfEaten = FALSE;
@@ -846,6 +896,7 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext *pContext, WPARAM wParam, LPARA
         *pfEaten = FALSE;
     }
     else {
+        readSelectionText(pContext, wParam);
         KeyEvent keyEvent(WM_KEYUP, wParam, lParam);
         *pfEaten = (BOOL)filterKeyUp(keyEvent);
     }
@@ -859,6 +910,7 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM lP
         *pfEaten = FALSE;
     }
     else {
+        readSelectionText(pContext, wParam);
         KeyEvent keyEvent(WM_KEYUP, wParam, lParam);
         *pfEaten = (BOOL)filterKeyUp(keyEvent);
         if(*pfEaten) {

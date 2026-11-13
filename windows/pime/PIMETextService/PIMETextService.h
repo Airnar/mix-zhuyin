@@ -138,6 +138,9 @@ public:
 	void showMessage(Ime::EditSession* session, std::wstring message, int duration = 3);
     void updateMessageWindow(Ime::EditSession* session);
 	void hideMessage();
+	// A popup next to the text the user selected (框選查詢); no composition
+	// or edit session is needed.
+	void showLookup(std::wstring message, int duration);
 
 private:
 	virtual ~TextService(void);  // COM object should only be deleted using Release()

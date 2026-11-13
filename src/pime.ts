@@ -22,6 +22,11 @@ import {
   runPowerShell,
 } from "./pime_dialogs";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
+import {
+  DoubleCtrlDetector,
+  LookupDictionary,
+  lookupMessage,
+} from "./pime_lookup";
 import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
 import { importPhraseFile, importSummary } from "./pime_phrase_import";
 import { defaultSettings, Settings } from "./pime_settings";
@@ -106,6 +111,35 @@ class PimeMcBopomofo {
   isAlphabetMode: boolean = false;
   /** The last request from PIME. */
   lastRequest: any = {};
+  /** Spots Ctrl tapped twice, for 框選查詢. */
+  readonly ctrlTaps = new DoubleCtrlDetector();
+  // Loaded on the first lookup; null if there is no dictionary file.
+  private lookupDictionary_: LookupDictionary | null | undefined = undefined;
+
+  /** The 框選查詢 dictionary next to index.js (CC-CEDICT), if present. */
+  private get lookupDictionary(): LookupDictionary | null {
+    if (this.lookupDictionary_ === undefined) {
+      this.lookupDictionary_ =
+        LookupDictionary.load(path.join(__dirname, "lookup_dict.json")) ??
+        null;
+    }
+    return this.lookupDictionary_;
+  }
+
+  /**
+   * The lookup popup for text selected in the app (框選查詢), or undefined.
+   * @param selection The selected text the text service sent.
+   */
+  public lookupResponse(selection: unknown): object | undefined {
+    if (typeof selection !== "string") {
+      return undefined;
+    }
+    const message = lookupMessage(selection, {
+      readingOf: (text) => this.inputController.readingOf(text),
+      translate: (text) => this.lookupDictionary?.translate(text),
+    });
+    return message ? { showLookup: { message, duration: 8 } } : undefined;
+  }
   /** Whether the last key down event was handled. */
   isLastFilterKeyDownHandled: boolean = false;
   /** Whether the input method is opened. */
@@ -826,6 +860,12 @@ try {
 
 const pimeMcBopomofo = new PimeMcBopomofo();
 
+/** Whether a Windows virtual-key code is Ctrl. */
+const isCtrlKey = (keyCode: number): boolean =>
+  keyCode === VK_Keys.VK_CONTROL ||
+  keyCode === VK_Keys.VK_LCONTROL ||
+  keyCode === VK_Keys.VK_RCONTROL;
+
 try {
   pimeMcBopomofo.createUserPhrasesIfNotExists();
 
@@ -914,6 +954,15 @@ module.exports = {
     }
 
     if (request.method === "filterKeyUp") {
+      // 框選查詢: the text service sends the selected text with Ctrl key ups.
+      if (
+        pimeMcBopomofo.ctrlTaps.keyUp(isCtrlKey(request.keyCode), Date.now())
+      ) {
+        const lookup = pimeMcBopomofo.lookupResponse(request.selectionText);
+        if (lookup) {
+          return Object.assign({}, responseTemplate, lookup, { return: false });
+        }
+      }
       const state = pimeMcBopomofo.inputController.state;
       let handled = state instanceof Empty === false;
       if (
@@ -1007,6 +1056,7 @@ module.exports = {
     }
 
     if (request.method === "filterKeyDown") {
+      pimeMcBopomofo.ctrlTaps.keyDown(isCtrlKey(request.keyCode), Date.now());
       if (
         lastRequest &&
         lastRequest.method === "filterKeyDown" &&

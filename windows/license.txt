@@ -31,6 +31,7 @@ SOFTWARE.
 
 資料授權：
 - 英文詞頻資料衍生自 wordfreq（Robyn Speer），採 CC BY-SA 4.0。
+- 框選查詢的辭典資料（lookup_dict.json）衍生自 CC-CEDICT，採 CC BY-SA 4.0。
 - 語言模型資料衍生自中文維基百科（CC BY-SA 4.0）與 Traditional Chinese C4
   （Yen-Ting Lin，ODC-By），採 CC BY-SA 4.0。
 - 中文詞庫來自小麥注音 McBopomofo（MIT）。

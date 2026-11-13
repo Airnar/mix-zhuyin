@@ -135,6 +135,14 @@ public:
 
     // Whether keys should bypass the input method in this context.
     bool shouldPassKeysThrough(ITfContext* context);
+
+    // The text the user selected in the app and where it is on screen, read
+    // when Ctrl is released while not composing (for 框選查詢, Ctrl twice).
+    // Empty for every other key.
+    const std::wstring& selectionText() const {
+        return selectionText_;
+    }
+    bool selectionTextRect(RECT* rect) const;
     
     // is keyboard opened for the whole thread
     bool isKeyboardOpened() const;
@@ -295,6 +303,12 @@ private:
     ComPtr<ITfLangBarMgr> langBarMgr_;
     std::vector<ComPtr<LangBarButton>> langBarButtons_;
     std::vector<PreservedKey> preservedKeys_;
+
+    // See selectionText().
+    void readSelectionText(ITfContext* context, WPARAM keyCode);
+    std::wstring selectionText_;
+    RECT selectionTextRect_;
+    bool hasSelectionTextRect_;
 };
 
 }
