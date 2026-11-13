@@ -28,6 +28,10 @@ export interface AiSettings {
   isLocal: boolean;
   /** Anthropic: the workspace, for keys not scoped to one. */
   workspaceId?: string;
+  /** The service's name in messages, e.g. Gemini. */
+  label?: string;
+  /** OpenAI-shaped APIs: sent as `reasoning_effort`, e.g. minimal. */
+  reasoningEffort?: string;
 }
 
 /** A cloud service the user can pick, and its defaults. */
@@ -38,6 +42,10 @@ export interface CloudProvider {
   baseUrl: string;
   /** A small, fast model for typing help. */
   model: string;
+  /** The service's name in messages. */
+  label: string;
+  /** How hard the model should think, if the service takes it. */
+  reasoningEffort?: string;
 }
 
 /** The cloud services the settings page offers. */
@@ -46,19 +54,101 @@ export const kCloudProviders: { [id: string]: CloudProvider } = {
     protocol: "anthropic",
     baseUrl: "https://api.anthropic.com/v1",
     model: "claude-haiku-5-5",
+    label: "Claude",
   },
   openai: {
     protocol: "openai",
     baseUrl: "https://api.openai.com/v1",
     model: "gpt-6-luna",
+    label: "OpenAI",
   },
   gemini: {
     protocol: "openai",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     model: "gemini-3.8-flash",
+    label: "Gemini",
+    // Typing help needs a quick answer, not long thinking.
+    reasoningEffort: "minimal",
   },
-  custom: { protocol: "openai", baseUrl: "", model: "" },
+  custom: { protocol: "openai", baseUrl: "", model: "", label: "雲端 AI" },
 };
+
+/**
+ * Where the user's cloud model is.
+ * @param providerId The service the user picked (`ai_cloud_provider`).
+ * @param custom The user's server, model and workspace; empty for defaults.
+ * @returns The settings, without the API key.
+ */
+export const cloudSettings = (
+  providerId: string,
+  custom: { baseUrl?: string; model?: string; workspaceId?: string },
+): AiSettings => {
+  const provider = kCloudProviders[providerId] ?? kCloudProviders.custom;
+  return {
+    protocol: provider.protocol,
+    baseUrl: custom.baseUrl || provider.baseUrl,
+    model: custom.model || provider.model,
+    apiKey: "",
+    isLocal: false,
+    label: provider.label,
+    ...(provider.reasoningEffort
+      ? { reasoningEffort: provider.reasoningEffort }
+      : {}),
+    ...(custom.workspaceId ? { workspaceId: custom.workspaceId } : {}),
+  };
+};
+
+/**
+ * Why a request failed: the service is busy (HTTP 429, 503), it took too
+ * long, it refused the key (HTTP 401, 403), there is no key yet, or
+ * something else.
+ */
+export type AiErrorKind = "busy" | "timeout" | "auth" | "noKey" | "failed";
+
+/** An error from asking a model, with why it failed. */
+export interface AiError extends Error {
+  kind: AiErrorKind;
+  /** The HTTP status, if the service answered. */
+  status?: number;
+}
+
+/**
+ * Makes an error that says why a request failed.
+ * @param kind Why.
+ * @param message For the user, e.g. "HTTP 503".
+ * @param status The HTTP status, if any.
+ * @returns The error.
+ */
+export const aiError = (
+  kind: AiErrorKind,
+  message: string,
+  status?: number,
+): AiError =>
+  Object.assign(new Error(message), {
+    kind,
+    ...(status === undefined ? {} : { status }),
+  });
+
+/**
+ * Why a request failed.
+ * @param e What it threw.
+ * @returns The kind; "failed" for errors without one (e.g. no network).
+ */
+export const aiErrorKind = (e: unknown): AiErrorKind => {
+  const kind = (e as { kind?: unknown } | null)?.kind;
+  return typeof kind === "string" ? (kind as AiErrorKind) : "failed";
+};
+
+const httpError = (status: number): AiError =>
+  aiError(
+    status === 429 || status === 503
+      ? "busy"
+      : status === 401 || status === 403
+        ? "auth"
+        : "failed",
+    "HTTP " + status,
+    status,
+  );
 
 /**
  * How long to wait for the local model: a cold Ollama model takes a while to
@@ -102,6 +192,40 @@ export type FetchLike = (
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
 /**
+ * Posts JSON and reads the JSON answer, within a time limit. HTTP errors and
+ * running out of time become `AiError`s.
+ */
+const postJson = async (
+  url: string,
+  headers: { [name: string]: string },
+  body: unknown,
+  fetchImpl: FetchLike,
+  timeoutMs: number,
+): Promise<unknown> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw httpError(response.status);
+    }
+    return await response.json();
+  } catch (e) {
+    if (controller.signal.aborted) {
+      throw aiError("timeout", "逾時");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
  * Asks the model once.
  * @param settings Where the model is.
  * @param messages The conversation.
@@ -115,44 +239,27 @@ export const chatCompletion = async (
   fetchImpl: FetchLike,
   timeoutMs = 30000,
 ): Promise<string> => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const headers: { [name: string]: string } = {
-      "Content-Type": "application/json",
-    };
-    if (settings.apiKey) {
-      headers.Authorization = "Bearer " + settings.apiKey;
-    }
-    const response = await fetchImpl(
-      settings.baseUrl.replace(/\/+$/, "") + "/chat/completions",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: settings.model,
-          messages,
-          temperature: 0.3,
-          stream: false,
-        }),
-        signal: controller.signal,
-      },
-    );
-    if (!response.ok) {
-      throw new Error("HTTP " + response.status);
-    }
-    const data = (await response.json()) as {
-      choices?: { message?: { content?: unknown } }[];
-    };
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      throw new Error("the model gave no answer");
-    }
-    // Reasoning models (Qwen3, DeepSeek-R1) think out loud first.
-    return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-  } finally {
-    clearTimeout(timer);
+  const data = (await postJson(
+    settings.baseUrl.replace(/\/+$/, "") + "/chat/completions",
+    settings.apiKey ? { Authorization: "Bearer " + settings.apiKey } : {},
+    {
+      model: settings.model,
+      messages,
+      temperature: 0.3,
+      stream: false,
+      ...(settings.reasoningEffort
+        ? { reasoning_effort: settings.reasoningEffort }
+        : {}),
+    },
+    fetchImpl,
+    timeoutMs,
+  )) as { choices?: { message?: { content?: unknown } }[] };
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== "string") {
+    throw new Error("the model gave no answer");
   }
+  // Reasoning models (Qwen3, DeepSeek-R1) think out loud first.
+  return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 };
 
 const kSystem =
@@ -172,73 +279,81 @@ export const anthropicMessages = async (
   fetchImpl: FetchLike,
   timeoutMs = 30000,
 ): Promise<string> => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const headers: { [name: string]: string } = {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + settings.apiKey,
-      "anthropic-version": kAnthropicVersion,
-    };
-    if (settings.workspaceId) {
-      headers["anthropic-workspace-id"] = settings.workspaceId;
-    }
-    const system = messages
-      .filter((m) => m.role === "system")
-      .map((m) => m.content)
-      .join("\n");
-    const response = await fetchImpl(
-      settings.baseUrl.replace(/\/+$/, "") + "/messages",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: settings.model,
-          max_tokens: 1024,
-          ...(system ? { system } : {}),
-          messages: messages
-            .filter((m) => m.role !== "system")
-            .map((m) => ({ role: m.role, content: m.content })),
-        }),
-        signal: controller.signal,
-      },
-    );
-    if (!response.ok) {
-      throw new Error("HTTP " + response.status);
-    }
-    const data = (await response.json()) as {
-      content?: { type?: string; text?: unknown }[];
-    };
-    const text = (data?.content ?? [])
-      .filter((b) => b.type === "text" && typeof b.text === "string")
-      .map((b) => b.text as string)
-      .join("");
-    if (!text) {
-      throw new Error("the model gave no answer");
-    }
-    return text.trim();
-  } finally {
-    clearTimeout(timer);
+  const headers: { [name: string]: string } = {
+    Authorization: "Bearer " + settings.apiKey,
+    "anthropic-version": kAnthropicVersion,
+  };
+  if (settings.workspaceId) {
+    headers["anthropic-workspace-id"] = settings.workspaceId;
   }
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n");
+  const data = (await postJson(
+    settings.baseUrl.replace(/\/+$/, "") + "/messages",
+    headers,
+    {
+      model: settings.model,
+      max_tokens: 1024,
+      ...(system ? { system } : {}),
+      messages: messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({ role: m.role, content: m.content })),
+    },
+    fetchImpl,
+    timeoutMs,
+  )) as { content?: { type?: string; text?: unknown }[] };
+  const text = (data?.content ?? [])
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  if (!text) {
+    throw new Error("the model gave no answer");
+  }
+  return text.trim();
 };
 
+/** How long to wait before asking a busy service again. */
+export const kRetryDelayMs = 1000;
+
 /**
- * Asks the model once, in the API shape its settings say.
+ * Asks the model, in the API shape its settings say. If the service is busy
+ * (HTTP 429 or 503), asks once more after a short wait, within the same time
+ * limit.
  * @param settings Where the model is.
  * @param messages The conversation.
  * @param fetchImpl The fetch function.
- * @param timeoutMs Give up after this long.
+ * @param timeoutMs Give up after this long, both tries together.
+ * @param retryDelayMs How long to wait before the second try.
  * @returns The answer.
  */
-export const askModel = (
+export const askModel = async (
   settings: AiSettings,
   messages: ChatMessage[],
   fetchImpl: FetchLike,
   timeoutMs = timeoutFor(settings),
-): Promise<string> =>
-  settings.protocol === "anthropic"
-    ? anthropicMessages(settings, messages, fetchImpl, timeoutMs)
-    : chatCompletion(settings, messages, fetchImpl, timeoutMs);
+  retryDelayMs = kRetryDelayMs,
+): Promise<string> => {
+  const ask = (ms: number): Promise<string> =>
+    settings.protocol === "anthropic"
+      ? anthropicMessages(settings, messages, fetchImpl, ms)
+      : chatCompletion(settings, messages, fetchImpl, ms);
+  const deadline = Date.now() + timeoutMs;
+  try {
+    return await ask(timeoutMs);
+  } catch (e) {
+    if (aiErrorKind(e) !== "busy") {
+      throw e;
+    }
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    const left = deadline - Date.now();
+    if (left <= 0) {
+      throw e;
+    }
+    return ask(left);
+  }
+};
 
 /**
  * The prompt for Ctrl+Enter.
@@ -345,12 +460,15 @@ export interface AiKey {
 interface Job {
   task: AiTask;
   isLocal: boolean;
+  /** The service's name in messages. */
+  label: string;
   timeoutMs: number;
   startedAt: number;
   input: string;
   done: boolean;
   answer?: string;
   error?: string;
+  errorKind?: AiErrorKind;
 }
 
 const VK_RETURN = 0x0d;
@@ -364,13 +482,27 @@ const kLookupWindowMs = 15000;
 const kPollMs = 300;
 const kNoLocalAnswer = "本機 AI 沒有回應，請確認 Ollama 已經啟動，模型名稱也正確。";
 
-/** What to tell the user when a job failed. */
-const failureMessage = (job: Job): string =>
-  job.isLocal
+/**
+ * What to tell the user when a job failed. Only a refused key (HTTP 401,
+ * 403) or a missing one asks the user to look at the key.
+ */
+const failureMessage = (job: Job): string => {
+  switch (job.errorKind) {
+    case "busy":
+      return job.label + " 忙線中，請稍後再試";
+    case "timeout":
+      return "等太久沒回應";
+    case "auth":
+      return (
+        job.label + " 不接受這把 API 金鑰（" + job.error + "），請到偏好設定檢查金鑰。"
+      );
+    case "noKey":
+      return "還沒設定 API 金鑰，請到偏好設定的「雲端 AI」貼上金鑰。";
+  }
+  return job.isLocal
     ? kNoLocalAnswer
-    : "雲端 AI 沒有回應（" +
-      (job.error ?? "") +
-      "），請確認 API 金鑰、模型名稱和網路。";
+    : job.label + " 沒有回應（" + (job.error ?? "") + "），請確認模型名稱和網路。";
+};
 
 /** Runs the AI features; see the file comment. */
 export class AiAssistant {
@@ -486,6 +618,7 @@ export class AiAssistant {
       }
       job.done = true;
       job.error = "逾時";
+      job.errorKind = "timeout";
     }
     this.job_ = undefined;
 
@@ -542,6 +675,8 @@ export class AiAssistant {
     const job: Job = {
       task,
       isLocal: settings.isLocal,
+      label: settings.label ?? (settings.isLocal ? "本機 AI" : "雲端 AI"),
+      // A busy service gets a second try within the request's time limit.
       timeoutMs: this.timeoutMs ?? timeoutFor(settings) + 5000,
       startedAt: now,
       input,
@@ -556,6 +691,7 @@ export class AiAssistant {
       },
       (e) => {
         job.error = e instanceof Error ? e.message : String(e);
+        job.errorKind = aiErrorKind(e);
         job.done = true;
       },
     );

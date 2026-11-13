@@ -1,5 +1,7 @@
 import {
   AiAssistant,
+  aiError,
+  aiErrorKind,
   AiHost,
   AiSettings,
   AiTask,
@@ -7,6 +9,7 @@ import {
   askModel,
   chatCompletion,
   ChatMessage,
+  cloudSettings,
   correctionPrompt,
   explainPrompt,
   FetchLike,
@@ -84,12 +87,107 @@ describe("chatCompletion", () => {
     );
   });
 
-  test("gives up after the timeout", async () => {
+  test("tells busy, refused and other HTTP errors apart", async () => {
+    const kindOf = (status: number): Promise<string> =>
+      chatCompletion(settings, [], answer("x", false, status)).then(
+        () => "none",
+        (e) => aiErrorKind(e),
+      );
+    await expect(kindOf(429)).resolves.toBe("busy");
+    await expect(kindOf(503)).resolves.toBe("busy");
+    await expect(kindOf(401)).resolves.toBe("auth");
+    await expect(kindOf(403)).resolves.toBe("auth");
+    await expect(kindOf(404)).resolves.toBe("failed");
+    await expect(kindOf(500)).resolves.toBe("failed");
+  });
+
+  test("gives up after the timeout, as a timeout", async () => {
     const fetchImpl: FetchLike = (_url, init) =>
       new Promise((_resolve, reject) => {
         init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
       });
-    await expect(chatCompletion(settings, [], fetchImpl, 10)).rejects.toThrow("aborted");
+    const failure = await chatCompletion(settings, [], fetchImpl, 10).catch((e) => e);
+    expect(aiErrorKind(failure)).toBe("timeout");
+  });
+
+  test("asks for little thinking when the settings say so", async () => {
+    const fetchImpl = answer("ok");
+    await chatCompletion({ ...settings, reasoningEffort: "minimal" }, [], fetchImpl);
+    expect(JSON.parse((fetchImpl as jest.Mock).mock.calls[0][1].body).reasoning_effort).toBe(
+      "minimal",
+    );
+    const plainFetch = answer("ok");
+    await chatCompletion(settings, [], plainFetch);
+    expect(JSON.parse((plainFetch as jest.Mock).mock.calls[0][1].body)).not.toHaveProperty(
+      "reasoning_effort",
+    );
+  });
+});
+
+describe("askModel retries", () => {
+  // Answers with each status in turn, then 200.
+  const statuses = (...codes: number[]): FetchLike => {
+    let i = 0;
+    return jest.fn(async () => {
+      const status = codes[i++] ?? 200;
+      return {
+        ok: status === 200,
+        status,
+        json: async () => ({ choices: [{ message: { content: "記得帶傘" } }] }),
+      };
+    });
+  };
+
+  test("asks once more when the service is busy", async () => {
+    for (const busy of [503, 429]) {
+      const fetchImpl = statuses(busy);
+      await expect(askModel(settings, [], fetchImpl, 1000, 0)).resolves.toBe("記得帶傘");
+      expect((fetchImpl as jest.Mock).mock.calls).toHaveLength(2);
+    }
+  });
+
+  test("only once", async () => {
+    const fetchImpl = statuses(503, 503);
+    const failure = await askModel(settings, [], fetchImpl, 1000, 0).catch((e) => e);
+    expect(aiErrorKind(failure)).toBe("busy");
+    expect((fetchImpl as jest.Mock).mock.calls).toHaveLength(2);
+  });
+
+  test("not for other errors", async () => {
+    for (const status of [401, 403, 404, 500]) {
+      const fetchImpl = statuses(status);
+      await expect(askModel(settings, [], fetchImpl, 1000, 0)).rejects.toThrow(
+        "HTTP " + status,
+      );
+      expect((fetchImpl as jest.Mock).mock.calls).toHaveLength(1);
+    }
+  });
+});
+
+describe("cloudSettings", () => {
+  test("Gemini asks for minimal reasoning; the others do not", () => {
+    const gemini = cloudSettings("gemini", {});
+    expect(gemini).toMatchObject({
+      protocol: "openai",
+      baseUrl: kCloudProviders.gemini.baseUrl,
+      model: kCloudProviders.gemini.model,
+      isLocal: false,
+      label: "Gemini",
+      reasoningEffort: "minimal",
+    });
+    expect(cloudSettings("openai", {}).reasoningEffort).toBeUndefined();
+    expect(cloudSettings("claude", {}).reasoningEffort).toBeUndefined();
+  });
+
+  test("uses the user's server, model and workspace when set", () => {
+    expect(
+      cloudSettings("claude", { model: "m", workspaceId: "wrkspc_1" }),
+    ).toMatchObject({ protocol: "anthropic", model: "m", workspaceId: "wrkspc_1", label: "Claude" });
+    expect(cloudSettings("custom", { baseUrl: "https://x/v1" })).toMatchObject({
+      baseUrl: "https://x/v1",
+      label: "雲端 AI",
+    });
+    expect(cloudSettings("nope", {}).label).toBe("雲端 AI");
   });
 });
 
@@ -242,7 +340,7 @@ describe("AiAssistant", () => {
     ai.keyDown(ctrl(0x0d), 0);
     expect(ai.refresh(500).fields.refreshAfter).toBeGreaterThan(0);
     const timedOut = ai.refresh(2000);
-    expect(JSON.stringify(timedOut.fields)).toContain("Ollama");
+    expect(JSON.stringify(timedOut.fields)).toContain("等太久沒回應");
   });
 
   test("drops suggestions if the user typed on", async () => {
@@ -339,19 +437,71 @@ describe("AiAssistant", () => {
     expect(used[0].isLocal).toBe(false);
   });
 
-  test("a cloud failure says so, with the reason", async () => {
-    const { host } = makeHost({
-      settingsFor: () => claude,
-      chat: async () => Promise.reject(new Error("HTTP 401")),
+  describe("failure messages say what went wrong", () => {
+    const gemini = cloudSettings("gemini", {});
+    const failWith = async (error: Error, model: AiSettings = gemini): Promise<string> => {
+      const { host } = makeHost({
+        settingsFor: () => model,
+        composing: () => ({ raw: "a", text: "a", readings: "a" }),
+        showSuggestions: () => false,
+        chat: async () => Promise.reject(error),
+      });
+      const ai = new AiAssistant(host);
+      ai.keyDown(ctrl(0x0d), 0);
+      await flush();
+      return (ai.refresh(100).fields.showMessage as { message: string }).message;
+    };
+
+    test("busy", async () => {
+      await expect(failWith(aiError("busy", "HTTP 503", 503))).resolves.toBe(
+        "Gemini 忙線中，請稍後再試",
+      );
+      await expect(
+        failWith(aiError("busy", "HTTP 429", 429), cloudSettings("custom", {})),
+      ).resolves.toBe("雲端 AI 忙線中，請稍後再試");
     });
-    const ai = new AiAssistant(host);
-    ai.rememberLookup("銀行", 0);
-    ai.keyDown(ctrl(0x45), 10);
-    await flush();
-    const message = JSON.stringify(ai.refresh(100).fields);
-    expect(message).toContain("雲端 AI");
-    expect(message).toContain("HTTP 401");
-    expect(message).not.toContain("Ollama");
+
+    test("too slow", async () => {
+      await expect(failWith(aiError("timeout", "逾時"))).resolves.toBe("等太久沒回應");
+      await expect(failWith(aiError("timeout", "逾時"), settings)).resolves.toBe(
+        "等太久沒回應",
+      );
+    });
+
+    test("only a refused key asks to check the key", async () => {
+      for (const status of [401, 403]) {
+        const message = await failWith(aiError("auth", "HTTP " + status, status));
+        expect(message).toContain("金鑰");
+        expect(message).toContain("HTTP " + status);
+      }
+      for (const error of [
+        aiError("busy", "HTTP 503", 503),
+        aiError("timeout", "逾時"),
+        aiError("failed", "HTTP 404", 404),
+        new Error("fetch failed"),
+      ]) {
+        expect(await failWith(error)).not.toContain("金鑰");
+      }
+    });
+
+    test("other cloud errors give the reason", async () => {
+      const message = await failWith(aiError("failed", "HTTP 404", 404));
+      expect(message).toContain("Gemini");
+      expect(message).toContain("HTTP 404");
+      expect(message).not.toContain("Ollama");
+    });
+
+    test("no key yet", async () => {
+      await expect(failWith(aiError("noKey", "還沒設定 API 金鑰"))).resolves.toContain(
+        "還沒設定 API 金鑰",
+      );
+    });
+
+    test("the local model points at Ollama", async () => {
+      await expect(failWith(new Error("ECONNREFUSED"), settings)).resolves.toContain(
+        "Ollama",
+      );
+    });
   });
 
   test("waits longer for the local model than for the cloud", () => {
@@ -367,6 +517,6 @@ describe("AiAssistant", () => {
     ai.keyDown(ctrl(0x0d), 0);
     // A cold local model may take most of a minute.
     expect(ai.refresh(kLocalTimeoutMs).fields.refreshAfter).toBeGreaterThan(0);
-    expect(JSON.stringify(ai.refresh(kLocalTimeoutMs + 6000).fields)).toContain("Ollama");
+    expect(JSON.stringify(ai.refresh(kLocalTimeoutMs + 6000).fields)).toContain("等太久沒回應");
   });
 });

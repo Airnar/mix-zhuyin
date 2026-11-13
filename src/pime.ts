@@ -17,12 +17,13 @@ import { Empty, Inputting, NotEmpty } from "./McBopomofo/InputState";
 import { InputUI } from "./McBopomofo/InputUI";
 import {
   AiAssistant,
+  aiError,
   AiResponse,
   AiSettings,
   AiTask,
   askModel,
+  cloudSettings,
   FetchLike,
-  kCloudProviders,
   kDefaultAiBaseUrl,
   kDefaultAiModel,
 } from "./pime_ai";
@@ -144,16 +145,11 @@ class PimeMcBopomofo {
           ? s.ai_explain_source
           : s.ai_rewrite_source;
     if (source === "cloud") {
-      const provider =
-        kCloudProviders[s.ai_cloud_provider] ?? kCloudProviders.custom;
-      return {
-        protocol: provider.protocol,
-        baseUrl: s.ai_cloud_base_url || provider.baseUrl,
-        model: s.ai_cloud_model || provider.model,
-        apiKey: "",
-        isLocal: false,
-        workspaceId: s.ai_cloud_workspace || undefined,
-      };
+      return cloudSettings(s.ai_cloud_provider, {
+        baseUrl: s.ai_cloud_base_url,
+        model: s.ai_cloud_model,
+        workspaceId: s.ai_cloud_workspace,
+      });
     }
     return {
       protocol: "openai",
@@ -171,7 +167,7 @@ class PimeMcBopomofo {
   private cloudKey(): Promise<string> {
     const sealed = this.settings.ai_cloud_key_dpapi || "";
     if (!sealed) {
-      return Promise.reject(new Error("還沒設定 API 金鑰"));
+      return Promise.reject(aiError("noKey", "還沒設定 API 金鑰"));
     }
     if (!this.cloudKey_ || this.cloudKey_.sealed !== sealed) {
       const key = unprotectSecret(sealed);
