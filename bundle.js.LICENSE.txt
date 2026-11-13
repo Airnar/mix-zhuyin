@@ -49,14 +49,19 @@
  * Derived from Chinese Wikipedia (CC BY-SA 4.0) and zh_TW_c4 (ODC-BY) with tools/mixed/train_bigram.py. Wikipedia text is
  * licensed under CC BY-SA 4.0, and so is THIS FILE (the data); see NOTICE.md.
  *
- * 300000 pairs from 284.8M characters (37648313 sentences).
+ * 300000 pairs from 285.7M characters (37787816 sentences).
  *
  * Format: one line per previous word, "prev<TAB>next bonus*100 ...".
  */
 
 /**
  * @license
- * Word-triple bonuses for mixed Chinese/English input. Empty until the
- * "Train language model" workflow builds it (tools/mixed/train_bigram.py
- * with --trigram-output); see NOTICE.md for the license of trained data.
+ * Word-triple bonuses for mixed Chinese/English input.
+ *
+ * Derived from Chinese Wikipedia (CC BY-SA 4.0) and zh_TW_c4 (ODC-BY) with tools/mixed/train_bigram.py. Wikipedia text is
+ * licensed under CC BY-SA 4.0, and so is THIS FILE (the data); see NOTICE.md.
+ *
+ * 200000 triples from 285.7M characters (37787816 sentences).
+ *
+ * Format: one line per two-word context, "prev2 prev<TAB>next bonus*100 ...".
  */
