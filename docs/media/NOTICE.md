@@ -36,6 +36,16 @@ Text is converted to Taiwan Traditional Chinese with OpenCC. Because of the
 Wikipedia share-alike terms, these derived files are licensed under CC BY-SA
 4.0. The file header states which sources a given build used.
 
+## Lookup dictionary
+
+`output/pime/lookup_dict.json`, which 框選查詢 (select text, tap Ctrl twice)
+shows meanings from, is derived from CC-CEDICT
+(https://www.mdbg.net/chinese/dictionary?page=cc-cedict), licensed under the
+Creative Commons Attribution-ShareAlike 4.0 license
+(https://creativecommons.org/licenses/by-sa/4.0/), and so is this derived
+file. It is built by `tools/mixed/build_lookup_dict.py` and keeps the words
+McBopomofo's dictionary has.
+
 ## Mixed input code
 
 The code under `src/MixedInput/` and the mixed-mode changes elsewhere are

@@ -50,6 +50,13 @@ commits carry the changes. In short:
 - **Password fields**: `TextService::shouldPassKeysThrough` also passes keys
   through when the input scope at the cursor is a password or PIN
   (`isPasswordField`, checked only while not composing).
+- **Selection lookup (框選查詢)**: on a Ctrl key up while not composing,
+  `TextService::readSelectionText` reads the app's selected text (up to 256
+  UTF-16 units) and its screen rect; the client sends it as `selectionText`
+  with `filterKeyUp` / `onKeyUp` for Ctrl, and a new `showLookup` response
+  field (`{message, duration}`, no edit session needed) shows it with
+  `TextService::showLookup` next to the selection. `MessageWindow` wraps
+  long or multi-line text and can be created without an edit session.
 - **Fix**: `ImeModule::unregisterServer` registered the systray category
   instead of unregistering it, leaving the TIP key behind after uninstall.
 - **Config tool**: `onConfigure` starts the config tool hidden (it is
