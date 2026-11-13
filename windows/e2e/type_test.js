@@ -35,27 +35,46 @@ function keyFor(ch) {
   throw new Error("No key for " + JSON.stringify(ch));
 }
 
+// "⇧" in a key sequence is a Shift tap on its own.
+const SHIFT_TAP = "⇧";
+const VK_SHIFT = 16;
+
+// Mirrors libIME's TextService and PIME's Client: TSF calls OnTestKey* and
+// then OnKey*, and OnKey* filters the key again before asking for an edit
+// session. Only on* responses come with an edit session, so only they can
+// change the composition or commit text; filter* responses can't.
+function pressKey(base, edge, state) {
+  const filterMethod = edge === "down" ? "filterKeyDown" : "filterKeyUp";
+  const onMethod = edge === "down" ? "onKeyDown" : "onKeyUp";
+  if (!send(Object.assign({ method: filterMethod }, base)).return) return false;
+  if (!send(Object.assign({ method: filterMethod }, base)).return) return false;
+  const r = send(Object.assign({ method: onMethod }, base));
+  if (r.commitString) state.committed += r.commitString;
+  if (typeof r.compositionString === "string") state.composing = r.compositionString;
+  return true;
+}
+
 function typeKeys(text) {
-  let committed = "";
-  let composing = "";
+  const state = { committed: "", composing: "" };
   for (const ch of text) {
+    if (ch === SHIFT_TAP) {
+      const down = new Array(256).fill(0);
+      down[VK_SHIFT] = 0x80;
+      const key = { keyCode: VK_SHIFT, charCode: 0, scanCode: 0, repeatCount: 0, isExtended: false };
+      pressKey(Object.assign({ keyStates: down }, key), "down", state);
+      pressKey(Object.assign({ keyStates: new Array(256).fill(0) }, key), "up", state);
+      continue;
+    }
     const k = keyFor(ch);
     const keyStates = new Array(256).fill(0);
-    if (k.shift) keyStates[16] = 0x80;
+    if (k.shift) keyStates[VK_SHIFT] = 0x80;
     const base = { keyCode: k.keyCode, charCode: k.charCode, keyStates, scanCode: 0, repeatCount: 0, isExtended: false };
-    const filtered = send(Object.assign({ method: "filterKeyDown" }, base));
-    let r = filtered;
-    if (filtered.return) {
-      r = send(Object.assign({ method: "onKeyDown" }, base));
-    } else if (ch !== "\n") {
-      committed += ch; // The app would receive the key itself.
+    if (!pressKey(base, "down", state) && ch !== "\n") {
+      state.committed += ch; // The app would receive the key itself.
     }
-    if (r.commitString) committed += r.commitString;
-    if (typeof r.compositionString === "string") composing = r.compositionString;
-    send(Object.assign({ method: "filterKeyUp" }, base));
-    send(Object.assign({ method: "onKeyUp" }, base));
+    pressKey(base, "up", state);
   }
-  return { committed, composing };
+  return state;
 }
 
 send({ method: "init", isWindows8Above: true, isMetroApp: false, isUiLess: false, isConsole: false });
@@ -69,14 +88,30 @@ const cases = [
   ["hello world\n\n", "hello world"],
   ["ru42k7294n03\n\n", "記得帶傘"],
   ["ji3d9 meeting\n\n", "我開 meeting"],
+  // A Shift tap while composing flips the segment: "up " becomes 因, and the
+  // app has to show it before anything else is typed. A second tap flips it
+  // back. (Keep this order: committing a flip teaches "up " to read as 因.)
+  ["up " + SHIFT_TAP + SHIFT_TAP, "", "up "],
+  ["\n\n", "up "],
+  ["up " + SHIFT_TAP, "", "因"],
+  ["\n\n", "因"],
 ];
 
 let failures = 0;
-for (const [keys, want] of cases) {
-  const { committed } = typeKeys(keys);
-  const ok = committed === want;
+// The third element, when present, is the composition the app shows at the
+// end of the keys.
+for (const [keys, want, wantComposing] of cases) {
+  const { committed, composing } = typeKeys(keys);
+  let ok = committed === want;
+  let got = JSON.stringify(committed);
+  let expected = JSON.stringify(want);
+  if (wantComposing !== undefined) {
+    ok = ok && composing === wantComposing;
+    got += ` composing ${JSON.stringify(composing)}`;
+    expected += ` composing ${JSON.stringify(wantComposing)}`;
+  }
   if (!ok) failures++;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${JSON.stringify(keys)} -> ${JSON.stringify(committed)}${ok ? "" : " (expected " + JSON.stringify(want) + ")"}`);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${JSON.stringify(keys)} -> ${got}${ok ? "" : " (expected " + expected + ")"}`);
 }
 console.log(failures ? `${failures} failed` : "all passed");
 process.exit(failures ? 1 : 0);

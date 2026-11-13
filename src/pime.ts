@@ -976,18 +976,12 @@ module.exports = {
       };
 
       if (pimeMcBopomofo.isShiftHold && pimeMcBopomofo.isMixedShiftHold) {
-        pimeMcBopomofo.isShiftHold = false;
-        pimeMcBopomofo.isMixedShiftHold = false;
-        pimeMcBopomofo.resetBeforeHandlingKey();
-        pimeMcBopomofo.inputController.mixedShiftTap();
-        const response = Object.assign(
-          {},
-          responseTemplate,
-          pimeMcBopomofo.uiState,
-          {
-            return: false,
-          },
-        );
+        // Claim the key up so PIME calls onKeyUp with an edit session: PIME
+        // ignores composition changes in filter* responses. The flip itself
+        // happens in onKeyUp, because TSF may filter the same key up twice.
+        const response = Object.assign({}, responseTemplate, {
+          return: true,
+        });
         return response;
       }
 
@@ -1019,6 +1013,25 @@ module.exports = {
     }
 
     if (request.method === "onKeyUp") {
+      if (
+        pimeMcBopomofo.isShiftHold &&
+        pimeMcBopomofo.isMixedShiftHold &&
+        request.keyCode === VK_Keys.VK_SHIFT
+      ) {
+        pimeMcBopomofo.isShiftHold = false;
+        pimeMcBopomofo.isMixedShiftHold = false;
+        pimeMcBopomofo.resetBeforeHandlingKey();
+        pimeMcBopomofo.inputController.mixedShiftTap();
+        const response = Object.assign(
+          {},
+          responseTemplate,
+          pimeMcBopomofo.uiState,
+          {
+            return: true,
+          },
+        );
+        return response;
+      }
       if (pimeMcBopomofo.isShiftHold) {
         let response = Object.assign({}, responseTemplate, {
           return: false,
