@@ -53,3 +53,10 @@
  *
  * Format: one line per previous word, "prev<TAB>next bonus*100 ...".
  */
+
+/**
+ * @license
+ * Word-triple bonuses for mixed Chinese/English input. Empty until the
+ * "Train language model" workflow builds it (tools/mixed/train_bigram.py
+ * with --trigram-output); see NOTICE.md for the license of trained data.
+ */
