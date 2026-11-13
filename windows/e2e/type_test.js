@@ -164,6 +164,11 @@ const cases = [
   ["\n\n", "up "],
   ["up " + SHIFT_TAP, "", "因"],
   ["\n\n", "因"],
+  // Digits that spell a toned syllable read as Chinese at the end (1 0 3 =
+  // ㄅㄢˇ); Shift turns them back into a number, which is then remembered.
+  ["103\n\n", "版"],
+  ["103" + SHIFT_TAP + "\n\n", "103"],
+  ["103\n\n", "103"],
 ];
 
 async function main() {

@@ -142,6 +142,12 @@ export class MixedDecoderParams {
   numberSplit = 1.5;
   /** A number glued to an English word ("a87"), either side. */
   numberNextToLetter = 2.0;
+  /**
+   * Digits that also spell toned Bopomofo syllables (1 0 3 = ㄅㄢˇ 版) and
+   * end the input: more likely Chinese than a number, since the user would
+   * otherwise go on with a space or a unit (103 年).
+   */
+  numberLooksLikeBopomofo = 1.5;
   punctuation = 0.3;
   /** A lowercase one-letter English word right after Chinese ("對a"). */
   singleLetterAfterChinese = 1.2;
@@ -212,6 +218,12 @@ export class MixedDecoder {
   readonly englishBias = new Map<string, number>();
   /** Learned per-phrase adjustments, keyed by "reading|value". */
   readonly phraseBias = new Map<string, number>();
+  /**
+   * Learned readings of digit strings: added to the number's cost, so
+   * positive means "usually Chinese", negative "usually a number". Replaces
+   * {@link MixedDecoderParams.numberLooksLikeBopomofo} for that string.
+   */
+  readonly digitsBias = new Map<string, number>();
   /**
    * Optional word-pair model. When set, each run of Chinese is re-read so
    * that phrases fit their neighbors (帶傘 rather than 代傘).
@@ -393,6 +405,22 @@ export class MixedDecoder {
     return results;
   }
 
+  /**
+   * Whether raw[i, j) splits into Bopomofo syllables that each end with a
+   * tone key (not Space), e.g. "103" = ㄅㄢˇ on the standard layout.
+   */
+  private spellsTonedSyllables_(raw: string, i: number, j: number): boolean {
+    if (i === j) {
+      return true;
+    }
+    return this.parseSyllables(raw.substring(0, j), i, true).some(
+      (p) =>
+        p.end <= j &&
+        this.isToneKey(raw[p.end - 1]) &&
+        this.spellsTonedSyllables_(raw, p.end, j),
+    );
+  }
+
   private chineseEdges_(
     raw: string,
     i: number,
@@ -551,6 +579,16 @@ export class MixedDecoder {
             cost += P.numberNextToLetter;
           }
           const text = raw.substring(i, j);
+          const whole =
+            (i === 0 || !isDigit(raw[i - 1])) && (j === n || !isDigit(raw[j]));
+          if (whole && /^[0-9]+$/.test(text)) {
+            const learned = this.digitsBias.get(text);
+            if (learned !== undefined) {
+              cost += learned;
+            } else if (j === n && this.spellsTonedSyllables_(raw, i, j)) {
+              cost += P.numberLooksLikeBopomofo;
+            }
+          }
           edges.push({
             token: {
               start: i,

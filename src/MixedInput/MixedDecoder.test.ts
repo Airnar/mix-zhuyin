@@ -130,6 +130,27 @@ describe("MixedDecoder", () => {
     expect(r.tokens.map((t) => t.output).join("")).toBe("187");
   });
 
+  test("digits that spell toned syllables at the end read as Chinese", () => {
+    const d = makeDecoder();
+    // 1 0 3 is ㄅㄢˇ on the standard layout.
+    expect(shape(decodeText(d, "103"))).toBe("Z");
+    expect(shape(decodeText(d, "104"))).toBe("Z");
+    // Not syllables, or no tone key: still numbers.
+    expect(decodeText(d, "2026")).toBe("2026");
+    expect(decodeText(d, "10")).toBe("10");
+    // A number followed by a space or more Chinese stays a number (103 年).
+    expect(decodeText(d, "103 ")).toBe("103 ");
+    expect(decodeText(d, "103su06")).toBe("103年");
+  });
+
+  test("learned digit readings override the default", () => {
+    const d = makeDecoder();
+    d.digitsBias.set("103", -3);
+    expect(decodeText(d, "103")).toBe("103");
+    d.digitsBias.set("2026", 3);
+    expect(decodeText(d, "2026")).toBe("2026"); // no Chinese reading at all
+  });
+
   test("forcing a range changes the reading", () => {
     const d = makeDecoder();
     const r = d.decode("up ", {

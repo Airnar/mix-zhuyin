@@ -163,6 +163,57 @@ describe("MixedComposer", () => {
     expect(after[c.currentCandidateIndex(after)].value).toBe(other.value);
   });
 
+  test("Shift flips digits between a number and Chinese, and learns", () => {
+    const c = composer();
+    type(c, "103");
+    const chinese = c.view().text;
+    expect(chinese).not.toBe("103");
+    expect(c.flip()).toBe(true);
+    expect(c.view().text).toBe("103");
+    expect(c.commit()).toBe("103");
+    // Kept as a number at commit: next time it starts as a number.
+    type(c, "103");
+    expect(c.view().text).toBe("103");
+    expect(c.flip()).toBe(true);
+    // (A space follows the committed number automatically.)
+    expect(c.view().text.trim()).toBe(chinese);
+    c.commit();
+    type(c, "103");
+    expect(c.view().text.trim()).toBe(chinese);
+  });
+
+  test("a number in the middle can be flipped to Chinese", () => {
+    const c = composer();
+    type(c, "103su06");
+    expect(c.view().text).toBe("103 年");
+    c.moveFocus(-1);
+    expect(c.flip()).toBe(true);
+    expect(c.view().text).not.toContain("103");
+  });
+
+  test("a number offers its Chinese reading as a candidate", () => {
+    const c = composer();
+    type(c, "103su06");
+    c.moveFocus(-1);
+    const flip = c
+      .candidates()
+      .find((x) => x.kind === MixedCandidateKind.Flip);
+    expect(flip?.value).toBe("zh");
+    c.selectCandidate(flip!);
+    expect(c.view().text).not.toContain("103");
+  });
+
+  test("digit learning survives export and import", () => {
+    const a = composer();
+    type(a, "103");
+    a.flip();
+    a.commit();
+    const b = composer();
+    b.importLearning(a.exportLearning());
+    type(b, "103");
+    expect(b.view().text).toBe("103");
+  });
+
   test("backspace removes one key at a time", () => {
     const c = composer();
     type(c, "su3");

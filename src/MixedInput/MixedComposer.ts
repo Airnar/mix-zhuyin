@@ -64,7 +64,7 @@ export interface MixedCandidate {
 
 /** A unit the cursor can stop on: a Chinese syllable or an English word. */
 interface Unit {
-  readonly kind: "zh" | "en" | "pend";
+  readonly kind: "zh" | "en" | "pend" | "num";
   readonly tokenIndex: number;
   /** Syllable index inside the token (Chinese only). */
   readonly syllable: number;
@@ -187,6 +187,16 @@ export class MixedComposer {
       } else if (t.lang === "en") {
         this.units_.push({
           kind: "en",
+          tokenIndex: ti,
+          syllable: 0,
+          start: t.start,
+          end: t.end,
+        });
+      } else if (t.type === MixedTokenType.Number) {
+        // Digits can be Bopomofo too, so the cursor can stop on a number and
+        // Shift can flip it.
+        this.units_.push({
+          kind: "num",
           tokenIndex: ti,
           syllable: 0,
           start: t.start,
@@ -367,9 +377,15 @@ export class MixedComposer {
     return this.flipToken(token);
   }
 
-  /** Switches `token` to the other language. */
+  /**
+   * Switches `token` to the other language. Digits switch between a number
+   * and Chinese.
+   */
   flipToken(token: MixedToken): boolean {
     const to: MixedLanguage = token.lang === "zh" ? "en" : "zh";
+    // Forced English keeps digits as a number; a digit string flipped away
+    // from Chinese has to come out as a number.
+    const digits = /^[0-9]+$/.test(this.raw_.substring(token.start, token.end));
     const savedForced = this.forced_.slice();
     const savedOverrides = this.overrides_.slice();
     const overlaps = (r: { start: number; end: number }): boolean =>
@@ -377,7 +393,12 @@ export class MixedComposer {
     this.forced_ = this.forced_.filter((f) => !overlaps(f));
     this.overrides_ = this.overrides_.filter((o) => !overlaps(o));
     const reads = (r: DecodeResult): boolean =>
-      r.tokens.some((t) => t.lang === to && overlaps(t));
+      r.tokens.some(
+        (t) =>
+          overlaps(t) &&
+          (t.lang === to ||
+            (digits && to === "en" && t.type === MixedTokenType.Number)),
+      );
     // If automatic detection already gives the target language once the
     // user's earlier choice is removed, don't force anything.
     let after = this.decoder.decode(this.raw_, this.options_());
@@ -462,7 +483,8 @@ export class MixedComposer {
         reading: "_mix_flip_en",
         token,
       });
-    } else if (unit.kind === "en") {
+    } else if (unit.kind === "en" || unit.kind === "num") {
+      // English words and numbers offer their Chinese reading.
       const alt = this.decoder.decode(
         this.raw_,
         this.options_({
@@ -580,6 +602,9 @@ export class MixedComposer {
    * reading more (or less) likely next time.
    */
   private learnFromFlips_(r: DecodeResult): void {
+    if (!this.englishLock) {
+      this.learnDigitFlips_(r);
+    }
     for (const t of r.tokens) {
       if (!t.lang) {
         continue;
@@ -597,6 +622,30 @@ export class MixedComposer {
       const delta = t.lang === "zh" ? -0.8 : 0.8;
       const v = (this.decoder.englishBias.get(word) ?? 0) + delta;
       this.decoder.englishBias.set(word, Math.max(-3, Math.min(3, v)));
+    }
+  }
+
+  /**
+   * Digit strings the user flipped and kept: remember the last choice, as a
+   * number or as Chinese.
+   */
+  private learnDigitFlips_(r: DecodeResult): void {
+    for (const t of r.tokens) {
+      const text = this.raw_.substring(t.start, t.end).trim();
+      if (!/^[0-9]+$/.test(text)) {
+        continue;
+      }
+      const kept = this.forced_.find(
+        (f) => f.start <= t.start && f.end >= t.start + text.length,
+      );
+      if (!kept) {
+        continue;
+      }
+      if (t.type === MixedTokenType.Number && kept.lang === "en") {
+        this.decoder.digitsBias.set(text, -2);
+      } else if (t.lang === "zh" && kept.lang === "zh") {
+        this.decoder.digitsBias.set(text, 2);
+      }
     }
   }
 
@@ -748,6 +797,7 @@ export class MixedComposer {
     return JSON.stringify({
       en: Object.fromEntries(this.decoder.englishBias),
       zh: Object.fromEntries(this.decoder.phraseBias),
+      digits: Object.fromEntries(this.decoder.digitsBias),
     });
   }
 
@@ -762,6 +812,11 @@ export class MixedComposer {
       for (const [k, v] of Object.entries(d.zh ?? {})) {
         if (typeof v === "number") {
           this.decoder.phraseBias.set(k, v);
+        }
+      }
+      for (const [k, v] of Object.entries(d.digits ?? {})) {
+        if (typeof v === "number" && /^[0-9]+$/.test(k)) {
+          this.decoder.digitsBias.set(k, Math.max(-3, Math.min(3, v)));
         }
       }
       this.decoder.clearCache();
