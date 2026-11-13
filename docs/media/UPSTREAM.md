@@ -43,6 +43,10 @@ commits carry the changes. In short:
   creates its font with ClearType and Microsoft JhengHei UI. The candidate
   and message windows sit a few pixels below the text (or above it near the
   bottom of the screen) instead of overlapping it (`ImeWindow::moveNearText`).
+- **Target clause**: a second display attribute (thick solid underline,
+  `TF_ATTR_TARGET_CONVERTED`); `TextService::setCompositionTarget` applies it
+  to a range, and the client reads the range from a new `compositionHighlight`
+  field (`[start, end)` in code points, like `compositionCursor`).
 - **Fix**: `ImeModule::unregisterServer` registered the systray category
   instead of unregistering it, leaving the TIP key behind after uninstall.
 - **Config tool**: `onConfigure` starts the config tool hidden (it is
