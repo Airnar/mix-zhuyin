@@ -2,6 +2,8 @@ window.onload = () => {
   const defaultSettings = {
     input_mode: "use_mcbopomofo",
     candidate_font_size: 16,
+    candidate_font_name: "Microsoft JhengHei UI",
+    candidate_layout: "vertical",
     layout: "standard",
     select_phrase: "before_cursor",
     candidate_keys: "123456789",
@@ -25,6 +27,45 @@ window.onload = () => {
   let settings = {};
   const $ = (id) => document.getElementById(id);
 
+  // Sample candidates for ㄕˋ, shown in the candidate window preview.
+  const previewCandidates = ["是", "事", "市", "試", "室", "世", "式", "視", "示"];
+
+  function renderPreview() {
+    const preview = $("cand_preview");
+    const keys = $("keys").value;
+    const count = +$("keys_count").value;
+    const horizontal = $("layout_horizontal").checked;
+    preview.style.fontFamily = `"${$("font_name").value}", sans-serif`;
+    preview.style.fontSize = `${+$("font_size").value}pt`;
+    preview.style.gridTemplateColumns = horizontal
+      ? `repeat(${count}, auto)`
+      : "auto";
+    preview.textContent = "";
+    previewCandidates.slice(0, count).forEach((candidate, index) => {
+      const item = document.createElement("span");
+      const key = document.createElement("b");
+      key.textContent = `${keys[index]}.`;
+      const text = document.createElement("i");
+      text.textContent = candidate;
+      text.style.fontStyle = "normal";
+      if (index === 0) {
+        text.className = "current";
+      }
+      item.append(key, text);
+      preview.append(item);
+    });
+  }
+
+  let statusTimer = undefined;
+  function showStatus(message, isError) {
+    const status = $("save_status");
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+    status.classList.add("visible");
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => status.classList.remove("visible"), 1600);
+  }
+
   function applySettings(settings) {
     {
       if (settings.input_mode === "use_plainbopomofo") {
@@ -47,10 +88,25 @@ window.onload = () => {
       }
     }
     {
+      const select = $("font_name");
+      const name = settings.candidate_font_name || defaultSettings.candidate_font_name;
+      if (![...select.options].some((option) => option.value === name)) {
+        // A font set by hand in the settings file.
+        select.add(new Option(name, name));
+      }
+      select.value = name;
+    }
+    {
+      const horizontal = settings.candidate_layout === "horizontal";
+      $("layout_horizontal").checked = horizontal;
+      $("layout_vertical").checked = !horizontal;
+    }
+    {
       const select = $("layout");
       const options = select.getElementsByTagName("option");
+      const layout = String(settings.layout || "Standard").toLowerCase();
       for (const option of options) {
-        if (option.value === settings.layout) {
+        if (option.value.toLowerCase() === layout) {
           option.selected = "selected";
           break;
         }
@@ -127,7 +183,7 @@ window.onload = () => {
       const select = $("moving_cursor_option");
       const options = select.getElementsByTagName("option");
       for (const option of options) {
-        if (option.value === settings.moving_cursor_option) {
+        if (option.value == settings.moving_cursor_option) {
           option.selected = "selected";
           break;
         }
@@ -160,6 +216,7 @@ window.onload = () => {
     {
       $("beep_on_error").checked = settings.beep_on_error;
     }
+    renderPreview();
   }
 
   function openUserDataFolder() {
@@ -178,9 +235,20 @@ window.onload = () => {
   function saveSettings(settings) {
     console.log("saving settings: " + settings);
     const xhttp = new XMLHttpRequest();
+    xhttp.onload = function () {
+      if (this.status >= 200 && this.status < 300) {
+        showStatus("已儲存", false);
+      } else {
+        showStatus("儲存失敗", true);
+      }
+    };
+    xhttp.onerror = function () {
+      showStatus("儲存失敗", true);
+    };
     xhttp.open("POST", "/config");
     const string = JSON.stringify(settings);
     xhttp.send(string);
+    renderPreview();
   }
 
   (function () {
@@ -214,6 +282,21 @@ window.onload = () => {
   $("font_size").onchange = (event) => {
     const value = +$("font_size").value;
     settings.candidate_font_size = value;
+    saveSettings(settings);
+  };
+
+  $("font_name").onchange = (event) => {
+    settings.candidate_font_name = $("font_name").value;
+    saveSettings(settings);
+  };
+
+  $("layout_vertical").onchange = (event) => {
+    settings.candidate_layout = "vertical";
+    saveSettings(settings);
+  };
+
+  $("layout_horizontal").onchange = (event) => {
+    settings.candidate_layout = "horizontal";
     saveSettings(settings);
   };
 
@@ -297,7 +380,7 @@ window.onload = () => {
 
   $("beep_on_error").onchange = (event) => {
     const checked = $("beep_on_error").checked;
-    settings.by_default_deactivated = checked;
+    settings.beep_on_error = checked;
     saveSettings(settings);
   };
 

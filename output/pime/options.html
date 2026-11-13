@@ -1,52 +1,131 @@
+<!DOCTYPE html>
 <html lang="zh-Hant-TW">
 
 <head>
     <meta charset="utf-8">
     <title>混打注音偏好設定</title>
-    <link rel="icon" type="image/x-icon" href="images/icon16.png">
-    <link rel="stylesheet" href="css/options.css">
+    <link rel="icon" type="image/png" href="images/icon16.png">
+    <link rel="stylesheet" href="css/settings.css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-        body {
-            max-width: 700px;
-        }
-    </style>
     <script src="js/options.js"></script>
 </head>
 
 <body>
-    <h1 id="options_title">
-        <img src="images/icon48.png" alt="混打注音" style="float: right" />
-        混打注音偏好設定
-    </h1>
-    <table>
-        <tr>
-            <td class="option_title">模式：</td>
-            <td>
-                <input type="radio" name="input_mode" value="use_mcbopomofo" id="use_mcbopomofo" checked="checked">
-                <label for="use_mcbopomofo">小麥注音 (自動選字)</label><br>
-                <input type="radio" name="input_mode" value="use_plainbopomofo" id="use_plainbopomofo">
-                <label for="use_plainbopomofo">傳統注音 (手動選字)</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="keyboard_layout">鍵盤配置：</td>
-            <td>
-                <select id="layout" title="鍵盤配置">
-                    <option id="keyboard_layout_standard" value="Standard">標準</option>
+    <header class="app-header">
+        <img src="images/icon48.png" alt="" width="40" height="40">
+        <div class="app-title">
+            <h1 id="options_title">混打注音偏好設定</h1>
+            <p>改了就生效，不用按儲存。</p>
+        </div>
+        <span id="save_status" class="save-status" role="status" aria-live="polite"></span>
+    </header>
+
+    <main>
+        <section class="card" aria-labelledby="mixed_mode_title">
+            <h2 id="mixed_mode_title">中英混打</h2>
+            <div class="row">
+                <label class="row-text" for="mixed_mode">
+                    <span class="row-title">自動判斷中文或英文</span>
+                    <span class="row-desc">打英文不用切換。組字時單按 Shift，可把游標所在那段中英互換。</span>
+                </label>
+                <input type="checkbox" class="switch" name="mixed_mode" id="mixed_mode">
+            </div>
+            <div class="row">
+                <label class="row-text" for="mixed_auto_space">
+                    <span class="row-title">自動加空白</span>
+                    <span class="row-desc">中文與英文、數字之間自動加半形空白。</span>
+                </label>
+                <input type="checkbox" class="switch" name="mixed_auto_space" id="mixed_auto_space">
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="input_title">
+            <h2 id="input_title">輸入</h2>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">選字方式</span>
+                    <span class="row-desc">自動選字會依前後文挑最可能的字詞。</span>
+                </div>
+                <div class="segmented" role="radiogroup" aria-label="選字方式">
+                    <input type="radio" name="input_mode" value="use_mcbopomofo" id="use_mcbopomofo" checked="checked">
+                    <label for="use_mcbopomofo">自動選字</label>
+                    <input type="radio" name="input_mode" value="use_plainbopomofo" id="use_plainbopomofo">
+                    <label for="use_plainbopomofo">手動選字</label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="row-text" for="layout">
+                    <span class="row-title" id="keyboard_layout">鍵盤配置</span>
+                </label>
+                <select id="layout">
+                    <option id="keyboard_layout_standard" value="Standard">標準（大千）</option>
                     <option id="keyboard_layout_eten" value="ETen">倚天</option>
                     <option id="keyboard_layout_hsu" value="Hsu">許氏</option>
                     <option id="keyboard_layout_eten26" value="ETen26">倚天 26 鍵</option>
-                    <option id="keyboard_layout_hanyupinyin" value="HanyuPinyin">漢語拼音</option>
                     <option id="keyboard_layout_ibm" value="IBM">IBM</option>
+                    <option id="keyboard_layout_hanyupinyin" value="HanyuPinyin">漢語拼音（不支援混打）</option>
                 </select>
-            </td>
-        </tr>
+            </div>
+            <div class="row">
+                <label class="row-text" for="shift_key">
+                    <span class="row-title" id="shift_key_title">Shift 切換中英文</span>
+                    <span class="row-desc" id="shift_key_label">沒有在組字時，單按 Shift 切換中文與英數模式。</span>
+                </label>
+                <input type="checkbox" class="switch" name="shift_key" id="shift_key">
+            </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title" id="shift_letter_title">Shift + 字母</span>
+                </div>
+                <div class="segmented" role="radiogroup" aria-label="Shift + 字母">
+                    <input type="radio" name="letters" value="uppercase_letters" id="uppercase_letters" checked="checked">
+                    <label for="uppercase_letters" id="shift_letter_uppercase">大寫字母</label>
+                    <input type="radio" name="letters" value="lowercase_letters" id="lowercase_letters">
+                    <label for="lowercase_letters" id="shift_letter_lowercase">小寫字母</label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="row-text" for="esc_key">
+                    <span class="row-title" id="esc_key_title">Esc 清除全部</span>
+                    <span class="row-desc" id="esc_key_label">按 Esc 清除整個輸入緩衝區，而不只是正在拼的注音。</span>
+                </label>
+                <input type="checkbox" class="switch" name="esc_key" id="esc_key">
+            </div>
+            <div class="row">
+                <label class="row-text" for="allow_change_prior_tone">
+                    <span class="row-title" id="tone_keys_title">可改前一個聲調</span>
+                    <span class="row-desc" id="allow_change_prior_tone_label">打完聲調後還能再改，類似 macOS 內建輸入法。僅限標準鍵盤。</span>
+                </label>
+                <input type="checkbox" class="switch" name="allow_change_prior_tone" id="allow_change_prior_tone">
+            </div>
+            <div class="row">
+                <label class="row-text" for="repeated_punctuation_choose_candidate">
+                    <span class="row-title">重複按標點換下一個</span>
+                    <span class="row-desc">連按同一個標點鍵，依序換成其他候選標點。</span>
+                </label>
+                <input type="checkbox" class="switch" name="repeated_punctuation_choose_candidate"
+                    id="repeated_punctuation_choose_candidate">
+            </div>
+        </section>
 
-        <tr>
-            <td class="option_title" id="candidate_font_size">選字窗字體大小：</td>
-            <td>
-                <select id="font_size" title="選字窗字體大小">
+        <section class="card" aria-labelledby="candidate_title">
+            <h2 id="candidate_title">選字窗</h2>
+            <div class="row">
+                <label class="row-text" for="font_name">
+                    <span class="row-title">字型</span>
+                </label>
+                <select id="font_name">
+                    <option value="Microsoft JhengHei UI">微軟正黑體</option>
+                    <option value="PMingLiU">新細明體</option>
+                    <option value="DFKai-SB">標楷體</option>
+                    <option value="Microsoft YaHei UI">微軟雅黑體</option>
+                </select>
+            </div>
+            <div class="row">
+                <label class="row-text" for="font_size">
+                    <span class="row-title" id="candidate_font_size">字體大小</span>
+                </label>
+                <select id="font_size">
                     <option id="font_size_10" value="10">10</option>
                     <option id="font_size_12" value="12">12</option>
                     <option id="font_size_14" value="14">14</option>
@@ -55,23 +134,35 @@
                     <option id="font_size_20" value="20">20</option>
                     <option id="font_size_22" value="22">22</option>
                     <option id="font_size_24" value="24">24</option>
+                    <option id="font_size_28" value="28">28</option>
                 </select>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="candidate_keys">選字按鍵：</td>
-            <td>
-                <select id="keys" title="選字按鍵">
-                    <option value="123456789">123456789</option>
-                    <option value="asdfghjkl">asdfghjkl</option>
-                    <option value="asdfzxcvb">asdfzxcvb</option>
+            </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">排列</span>
+                </div>
+                <div class="segmented" role="radiogroup" aria-label="選字窗排列">
+                    <input type="radio" name="candidate_layout" value="vertical" id="layout_vertical" checked="checked">
+                    <label for="layout_vertical">直排</label>
+                    <input type="radio" name="candidate_layout" value="horizontal" id="layout_horizontal">
+                    <label for="layout_horizontal">橫排</label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="row-text" for="keys">
+                    <span class="row-title" id="candidate_keys">選字按鍵</span>
+                </label>
+                <select id="keys">
+                    <option value="123456789">1 2 3 4 5 6 7 8 9</option>
+                    <option value="asdfghjkl">a s d f g h j k l</option>
+                    <option value="asdfzxcvb">a s d f z x c v b</option>
                 </select>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title">選字按鍵数量：</td>
-            <td>
-                <select id="keys_count" title="選字按鍵">
+            </div>
+            <div class="row">
+                <label class="row-text" for="keys_count">
+                    <span class="row-title">每頁候選字數</span>
+                </label>
+                <select id="keys_count">
                     <option value="4">4</option>
                     <option value="5">5</option>
                     <option value="6">6</option>
@@ -79,120 +170,90 @@
                     <option value="8">8</option>
                     <option value="9" selected="selected">9</option>
                 </select>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title">選字時：</td>
-            <td>
-                <select id="moving_cursor_option" title="選字時移動游標">
-                    <option value="0" selected="selected">不移動游標</option>
-                    <option value="1">JK 按鍵移動游標</option>
-                    <option value="2">HL 按鍵移動游標</option>
+            </div>
+            <div class="preview-row">
+                <span class="row-desc">預覽（實際外觀由 PIME 繪製，顏色無法更改）</span>
+                <div class="cand-window" id="cand_preview" aria-hidden="true"></div>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="select_candidate">
+            <h2 id="select_candidate">選字行為</h2>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">選擇游標的哪一邊</span>
+                    <span class="row-desc">之前類似漢音輸入法，之後類似微軟新注音。</span>
+                </div>
+                <div class="segmented" role="radiogroup" aria-label="選擇候選字">
+                    <input type="radio" name="select_phrase" value="before_cursor" id="before_cursor" checked="checked">
+                    <label for="before_cursor" id="select_candidate_before_cursor">游標之前</label>
+                    <input type="radio" name="select_phrase" value="after_cursor" id="after_cursor">
+                    <label for="after_cursor" id="select_candidate_after_cursor">游標之後</label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="row-text" for="move_cursor">
+                    <span class="row-title" id="select_candidate_move_cursor">選字後移動游標</span>
+                    <span class="row-desc">選完字，游標自動跳到那個詞的後面。</span>
+                </label>
+                <input type="checkbox" class="switch" name="move_cursor" id="move_cursor">
+            </div>
+            <div class="row">
+                <label class="row-text" for="moving_cursor_option">
+                    <span class="row-title">選字窗開著時移動游標</span>
+                </label>
+                <select id="moving_cursor_option">
+                    <option value="0" selected="selected">不移動</option>
+                    <option value="1">用 J、K 移動</option>
+                    <option value="2">用 H、L 移動</option>
                 </select>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="select_candidate">選擇候選字：</td>
-            <td>
-                <input type="radio" name="select_phrase" value="before_cursor" id="before_cursor"
-                    checked="checked"><label for="before_cursor"
-                    id="select_candidate_before_cursor">游標之前（類似漢音輸入法）</label><br>
-                <input type="radio" name="select_phrase" value="after_cursor" id="after_cursor"><label
-                    for="after_cursor" id="select_candidate_after_cursor">游標之後（類似微軟新注音輸入法）</label><br>
-                <input type="checkbox" name="move_cursor" id="move_cursor"><label for="move_cursor"
-                    id="select_candidate_move_cursor">選字之後自動移動游標位置</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="esc_key_title">ESC 按鍵：</td>
-            <td>
-                <input type="checkbox" name="esc_key" id="esc_key"><label for="esc_key" id="esc_key_label">ESC
-                    按鍵會清除整個輸入緩衝區的內容</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="mixed_mode_title">中英混打：</td>
-            <td>
-                <input type="checkbox" name="mixed_mode" id="mixed_mode"><label for="mixed_mode"
-                    id="mixed_mode_label">自動判斷中文或英文，不用切換（組字時單按 Shift 可把游標所在那段中英互換）</label><br>
-                <input type="checkbox" name="mixed_auto_space" id="mixed_auto_space"><label
-                    for="mixed_auto_space" id="mixed_auto_space_label">中文與英文、數字之間自動加空白</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="shift_key_title">Shift 按鍵：</td>
-            <td>
-                <input type="checkbox" name="shift_key" id="shift_key"><label for="shift_key" id="shift_key_label">使用
-                    Shift 按鍵切換中英文</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="shift_letter_title">Shift +字母按鍵：</td>
-            <td>
-                <input type="radio" name="letters" value="uppercase_letters" id="uppercase_letters" checked="checked">
-                <label for="uppercase_letters" id="shift_letter_uppercase">輸入大寫字母</label><br>
-                <input type="radio" name="letters" value="lowercase_letters" id="lowercase_letters">
-                <label for="lowercase_letters" id="shift_letter_lowercase">輸入小寫字母</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title">Ctrl + Enter：</td>
-            <td>
-                <select id="ctrl_enter_option" title="按下 Ctrl 與 Enter 時的行為">
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="advanced_title">
+            <h2 id="advanced_title">進階</h2>
+            <div class="row">
+                <label class="row-text" for="ctrl_enter_option">
+                    <span class="row-title">Ctrl + Enter</span>
+                    <span class="row-desc">打完字按 Ctrl + Enter，輸出注音、點字或拼音。</span>
+                </label>
+                <select id="ctrl_enter_option">
                     <option value="0">不使用</option>
-                    <option value="1">輸入注音符號</option>
-                    <option value="2">輸入 HTML Ruby</option>
-                    <option value="3">輸入台灣點字 - Unicode</option>
-                    <option value="5">輸入台灣點字 - ASCII</option>
-                    <option value="4">輸入漢語拼音</option>
-                </select><br>
-                在輸入一些內容後，按下 Ctrl 與 Enter 可以輸出特殊內容。
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="tone_keys_title">聲調鍵：</td>
-            <td>
-                <input type="checkbox" name="allow_change_prior_tone" id="allow_change_prior_tone"><label
-                    for="allow_change_prior_tone" id="allow_change_prior_tone_label">允許在輸入聲調之後改變聲調<br>
-                    （類似 macOS 內建輸入法。僅適用於標準鍵盤佈局）。</label>
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title">標點符號：</td>
-            <td>
-                <input type="checkbox" name="repeated_punctuation_choose_candidate"
-                    id="repeated_punctuation_choose_candidate"><label
-                    for="repeated_punctuation_choose_candidate">重複按下標點符號，選擇下一個候選標點</label>
-            </td>
-        </tr>
+                    <option value="1">注音符號</option>
+                    <option value="2">HTML Ruby</option>
+                    <option value="3">台灣點字（Unicode）</option>
+                    <option value="5">台灣點字（ASCII）</option>
+                    <option value="4">漢語拼音</option>
+                </select>
+            </div>
+            <div class="row">
+                <label class="row-text" for="by_default_deactivated">
+                    <span class="row-title" id="by_default_deactivated_label">預設以英數模式啟動</span>
+                </label>
+                <input type="checkbox" class="switch" name="by_default_deactivated" id="by_default_deactivated">
+            </div>
+            <div class="row">
+                <label class="row-text" for="beep_on_error">
+                    <span class="row-title" id="beep_on_error_label">打錯時發出嗶聲</span>
+                </label>
+                <input type="checkbox" class="switch" name="beep_on_error" id="beep_on_error">
+            </div>
+        </section>
 
-        <tr>
-            <td class="option_title" id="system_behaviour_title">系統行為：</td>
-            <td>
-                <input type="checkbox" name="by_default_deactivated" id="by_default_deactivated"><label
-                    for="by_default_deactivated" id="by_default_deactivated_label">在 Windows 8 以上系統預設以英數方式啟動</label><br>
-                <input type="checkbox" name="beep_on_error" id="beep_on_error"><label for="beep_on_error"
-                    id="beep_on_error_label">錯誤時發出嗶聲提示</label><br>
+        <section class="card" aria-labelledby="others_title">
+            <h2 id="others_title">其他</h2>
+            <nav class="links">
+                <a rel="noopener" href="user_phrases.html" target="_blank">編輯使用者詞彙</a>
+                <a rel="noopener" href="" id="open_data_folder">打開使用者資料夾<span class="row-desc">Explorer 視窗可能在背景開啟</span></a>
+                <a rel="noopener" href="help.html" target="_blank">輔助說明</a>
+                <a rel="noopener" href="https://github.com/Airnar/mix-zhuyin/issues" target="_blank">問題回報</a>
+                <a rel="noopener" href="https://github.com/Airnar/mix-zhuyin" target="_blank">混打注音網站</a>
+                <a rel="noopener" href="https://mcbopomofo.openvanilla.org/" target="_blank">小麥注音官方網站<span class="row-desc">混打注音的基礎</span></a>
+            </nav>
+        </section>
 
-            </td>
-        </tr>
-        <tr>
-            <td class="option_title" id="others_title">其他：</td>
-            </td>
-            <td>
-                <p>
-                    <a rel="noopener" href="user_phrases.html" target="_blank">編輯使用者詞彙</a><br>
-                    <a rel="noopener" href="" id="open_data_folder">打開使用者資料夾</a>（Explorer 視窗可能會在背景開啟）<br />
-                    <a rel="noopener" href="help.html" target="_blank">輔助說明</a><br>
-                    <a rel="noopener" href="https://github.com/Airnar/mix-zhuyin" target="_blank">混打注音網站</a><br />
-                    <a rel="noopener" href="https://mcbopomofo.openvanilla.org/" target="_blank">小麥注音官方網站（混打注音的基礎）</a><br />
-                    <a rel="noopener" href="https://github.com/Airnar/mix-zhuyin/issues" target="_blank">問題回報</a><br />
-                    混打注音 for PIME 0.1.0（基於小麥注音）
-                </p>
-            </td>
-        </tr>
-
-    </table>
+        <footer class="app-footer">混打注音 for PIME 0.1.0（基於小麥注音，MIT 授權）</footer>
+    </main>
 </body>
 
 </html>

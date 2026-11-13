@@ -78,7 +78,13 @@ function typeKeys(text) {
 }
 
 send({ method: "init", isWindows8Above: true, isMetroApp: false, isUiLess: false, isConsole: false });
-send({ method: "onActivate", isKeyboardOpen: true });
+const activated = send({ method: "onActivate", isKeyboardOpen: true });
+const ui = activated.customizeUI || {};
+if (ui.candFontName !== "Microsoft JhengHei UI" || ui.candPerRow !== 1) {
+  console.log(`FAIL  candidate window settings ${JSON.stringify(ui)}`);
+  process.exit(1);
+}
+console.log(`PASS  candidate window settings ${JSON.stringify(ui)}`);
 
 // Each case ends with a second Enter (a new line in the app), so spacing
 // does not carry over from the previous case.

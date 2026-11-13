@@ -49,7 +49,7 @@ jobs:
       matrix:
         # 2.0 betas carry the current Node.js runtime and McBopomofo; 1.3.0 is
         # the release GitHub marks as "latest".
-        pime: ["v2.0.0-beta3", "v1.3.0-stable"]
+        pime: ["v2.0.0-beta4", "v2.0.0-beta3", "v1.3.0-stable"]
     name: windows-e2e (PIME ${{ matrix.pime }})
     steps:
       - uses: actions/checkout@v6

@@ -19,6 +19,7 @@ import {
 import { Empty, Inputting, NotEmpty } from "./McBopomofo/InputState";
 import { InputUI } from "./McBopomofo/InputUI";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
+import { candidateUi, kDefaultCandidateFont } from "./pime_ui";
 
 /**
  * The McBopomofo Settings.
@@ -28,6 +29,14 @@ interface Settings {
   input_mode: string;
   /** The font size of the candidate window. */
   candidate_font_size: number;
+  /** The Windows font face name of the candidate window. */
+  candidate_font_name: string;
+  /**
+   * The candidate window layout.
+   * @remarks
+   * Valid options: "vertical" and "horizontal".
+   */
+  candidate_layout: string;
   /**
    * The keyboard layout.
    * @remarks
@@ -109,6 +118,8 @@ interface UiState {
 const defaultSettings: Settings = {
   input_mode: "use_mcbopomofo",
   candidate_font_size: 16,
+  candidate_font_name: kDefaultCandidateFont,
+  candidate_layout: "vertical",
   layout: "standard",
   select_phrase: "before_cursor",
   candidate_keys: "123456789",
@@ -670,23 +681,9 @@ class PimeMcBopomofo {
    * @returns The custom UI response.
    */
   public customUiResponse(): any {
-    let fontSize = this.settings.candidate_font_size;
-    if (fontSize === undefined) {
-      fontSize = 16;
-    } else if (fontSize < 10) {
-      fontSize = 10;
-    } else if (fontSize > 32) {
-      fontSize = 32;
-    }
-
     return {
       openKeyboard: this.isOpened,
-      customizeUI: {
-        candPerRow: 1,
-        candFontSize: fontSize,
-        candFontName: "Microsoft YaHei",
-        candUseCursor: true,
-      },
+      customizeUI: candidateUi(this.settings),
       setSelKeys: this.settings.candidate_keys,
       keyboardOpen: this.isOpened,
     };
