@@ -22,6 +22,7 @@ window.onload = () => {
     allow_changing_prior_tone: false,
     mixed_mode: true,
     mixed_auto_space: true,
+    mixed_drop_stray_keys: true,
   };
 
   let settings = {};
@@ -156,6 +157,8 @@ window.onload = () => {
     {
       $("mixed_mode").checked =
         settings.mixed_mode === undefined ? true : settings.mixed_mode;
+      $("mixed_drop_stray_keys").checked =
+        settings.mixed_drop_stray_keys !== false;
       $("mixed_auto_space").checked =
         settings.mixed_auto_space === undefined
           ? true
@@ -341,6 +344,11 @@ window.onload = () => {
 
   $("mixed_mode").onchange = (event) => {
     settings.mixed_mode = $("mixed_mode").checked;
+    saveSettings(settings);
+  };
+
+  $("mixed_drop_stray_keys").onchange = (event) => {
+    settings.mixed_drop_stray_keys = $("mixed_drop_stray_keys").checked;
     saveSettings(settings);
   };
 

@@ -224,6 +224,17 @@ export class KeyHandler {
   }
 
   private mixedAutoSpace_: boolean = true;
+
+  private mixedDropStrayKeys_: boolean = true;
+
+  /** Whether mixed mode drops stray keys typed between Chinese syllables. */
+  public get mixedDropStrayKeys(): boolean {
+    return this.mixedDropStrayKeys_;
+  }
+
+  public set mixedDropStrayKeys(flag: boolean) {
+    this.mixedDropStrayKeys_ = flag;
+  }
   /** Insert a space between Chinese and English in mixed mode. */
   public get mixedAutoSpace(): boolean {
     return this.mixedAutoSpace_;
@@ -263,6 +274,10 @@ export class KeyHandler {
     }
     this.mixedComposer_.decoder.layout = this.keyboardLayout;
     this.mixedComposer_.autoSpace = this.mixedAutoSpace_;
+    if (this.mixedComposer_.decoder.dropStrayKeys !== this.mixedDropStrayKeys_) {
+      this.mixedComposer_.decoder.dropStrayKeys = this.mixedDropStrayKeys_;
+      this.mixedComposer_.decoder.clearCache();
+    }
     return this.mixedComposer_;
   }
 

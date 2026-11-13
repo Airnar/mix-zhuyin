@@ -155,6 +155,18 @@ describe("KeyHandler in mixed mode", () => {
     expect(s.composing).toBe("我開 meeting");
   });
 
+  test("drops a stray key unless turned off", () => {
+    const handler = mixedHandler();
+    const s = new Session(handler);
+    s.type("su3ccl3");
+    expect(s.composing).toBe("你好");
+    handler.mixedDropStrayKeys = false;
+    const t = new Session(handler);
+    t.key(Key.namedKey(KeyName.ESC));
+    t.type("su3ccl3");
+    expect(t.composing).not.toBe("你好");
+  });
+
   test("Right at the end also accepts the prediction", () => {
     const s = new Session(mixedHandler());
     s.type("ji3d9 meet");

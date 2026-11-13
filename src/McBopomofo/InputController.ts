@@ -587,6 +587,15 @@ export class InputController {
   }
 
   /**
+   * Sets whether mixed mode drops stray keys typed by mistake between
+   * Chinese syllables (刪除贅字).
+   * @param flag Drop stray keys.
+   */
+  public setMixedDropStrayKeys(flag: boolean): void {
+    this.keyHandler_.mixedDropStrayKeys = flag;
+  }
+
+  /**
    * Call on a single Shift tap. In mixed mode, while composing, it switches
    * the segment under the cursor between Chinese and English.
    * @returns False if not handled; the host may toggle its alphabet mode.

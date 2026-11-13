@@ -330,6 +330,9 @@ class PimeMcBopomofo {
     this.inputController.setMixedAutoSpace(
       this.settings.mixed_auto_space !== false,
     );
+    this.inputController.setMixedDropStrayKeys(
+      this.settings.mixed_drop_stray_keys !== false,
+    );
     this.inputController.setLanguageCode("zh-TW");
   }
 

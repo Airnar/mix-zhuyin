@@ -151,6 +151,29 @@ describe("MixedDecoder", () => {
     expect(decodeText(d, "2026")).toBe("2026"); // no Chinese reading at all
   });
 
+  test("drops a stray key typed between Chinese syllables", () => {
+    const d = makeDecoder();
+    expect(decodeText(d, "su3ccl3")).toBe("你好"); // an extra ㄏ
+    expect(decodeText(d, "su33cl3")).toBe("你好"); // the tone key twice
+  });
+
+  test("dropping stray keys can be turned off", () => {
+    const d = makeDecoder();
+    d.dropStrayKeys = false;
+    expect(decodeText(d, "su3ccl3")).not.toBe("你好");
+  });
+
+  test("keeps keys that are still being typed or are English", () => {
+    const d = makeDecoder();
+    // Unfinished: the last key may start the next syllable.
+    expect(d.decode("su3c", {}).tokens.map((t) => t.output).join("")).toBe(
+      "你ㄏ",
+    );
+    expect(decodeText(d, "ji3d9 meeting")).toBe("我開meeting");
+    expect(decodeText(d, "coffee")).toBe("coffee");
+    expect(decodeText(d, "ji3 coffee")).toContain("coffee");
+  });
+
   test("forcing a range changes the reading", () => {
     const d = makeDecoder();
     const r = d.decode("up ", {

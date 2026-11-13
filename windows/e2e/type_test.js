@@ -166,6 +166,8 @@ const cases = [
   ["\n\n", "因"],
   // Digits that spell a toned syllable read as Chinese at the end (1 0 3 =
   // ㄅㄢˇ); Shift turns them back into a number, which is then remembered.
+  // A stray key typed too fast between syllables is dropped (刪除贅字).
+  ["su3ccl3\n\n", "你好"],
   ["103\n\n", "版"],
   ["103" + SHIFT_TAP + "\n\n", "103"],
   ["103\n\n", "103"],

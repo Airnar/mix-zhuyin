@@ -73,6 +73,8 @@ export interface Settings {
   mixed_mode: boolean;
   /** Whether to put a space between Chinese and English in mixed mode. */
   mixed_auto_space: boolean;
+  /** Mixed mode: drop stray keys typed between Chinese syllables. */
+  mixed_drop_stray_keys: boolean;
 }
 
 /** The default settings, used when the settings file lacks a key. */
@@ -99,4 +101,5 @@ export const defaultSettings: Settings = {
   bopomofo_font_annotation_support_enabled: false,
   mixed_mode: true,
   mixed_auto_space: true,
+  mixed_drop_stray_keys: true,
 };

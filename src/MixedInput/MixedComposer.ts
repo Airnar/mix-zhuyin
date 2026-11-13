@@ -611,7 +611,7 @@ export class MixedComposer {
       this.learnDigitFlips_(r);
     }
     for (const t of r.tokens) {
-      if (!t.lang) {
+      if (!t.lang || t.type === MixedTokenType.Skipped) {
         continue;
       }
       const forced = this.forced_.find(

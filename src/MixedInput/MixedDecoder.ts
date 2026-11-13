@@ -37,6 +37,8 @@ export enum MixedTokenType {
   Space = "space",
   /** Fallback: a single character output as typed. */
   Literal = "lit",
+  /** A stray key typed by mistake between Chinese syllables, dropped. */
+  Skipped = "skip",
 }
 
 export interface MixedToken {
@@ -148,6 +150,11 @@ export class MixedDecoderParams {
    * otherwise go on with a space or a unit (103 年).
    */
   numberLooksLikeBopomofo = 1.5;
+  /**
+   * Dropping one stray key inside Chinese typing (刪除贅字): an extra key
+   * after a syllable, or a key pressed twice, when a full syllable follows.
+   */
+  strayKey = 3.0;
   punctuation = 0.3;
   /** A lowercase one-letter English word right after Chinese ("對a"). */
   singleLetterAfterChinese = 1.2;
@@ -224,6 +231,8 @@ export class MixedDecoder {
    * {@link MixedDecoderParams.numberLooksLikeBopomofo} for that string.
    */
   readonly digitsBias = new Map<string, number>();
+  /** Whether stray keys between Chinese syllables are dropped (刪除贅字). */
+  dropStrayKeys = true;
   /**
    * Optional word-pair model. When set, each run of Chinese is re-read so
    * that phrases fit their neighbors (帶傘 rather than 代傘).
@@ -604,7 +613,32 @@ export class MixedDecoder {
       }
     }
 
-    // 4) Space and punctuation.
+    // 4) A stray key between Chinese syllables, dropped. Only when it follows
+    // a tone key or repeats the previous key, and a whole syllable follows,
+    // so a key that may start the next syllable is never hidden.
+    if (
+      this.dropStrayKeys &&
+      i > 0 &&
+      i + 1 < n &&
+      c !== " " &&
+      this.isBopomofoKey(c) &&
+      (this.isToneKey(raw[i - 1]) || raw[i - 1] === c) &&
+      this.parseSyllables(raw, i + 1, final).some((p) => !p.pending)
+    ) {
+      edges.push({
+        token: {
+          start: i,
+          end: i + 1,
+          lang: "zh",
+          type: MixedTokenType.Skipped,
+          text: c,
+          output: "",
+          cost: P.strayKey,
+        },
+      });
+    }
+
+    // 5) Space and punctuation.
     if (c === " ") {
       edges.push({
         token: {
@@ -736,6 +770,13 @@ export class MixedDecoder {
           }
           const lang = st >> 1;
           const wasNumber = st & 1;
+          // Stray keys are dropped only in the middle of Chinese.
+          if (
+            token.type === MixedTokenType.Skipped &&
+            (lang !== 0 || wasNumber)
+          ) {
+            continue;
+          }
           let nextLang = lang;
           let cost = dp[i][st] + token.cost + penalty;
           if (token.lang) {
