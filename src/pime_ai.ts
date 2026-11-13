@@ -139,16 +139,41 @@ export const aiErrorKind = (e: unknown): AiErrorKind => {
   return typeof kind === "string" ? (kind as AiErrorKind) : "failed";
 };
 
-const httpError = (status: number): AiError =>
-  aiError(
+/** How much of a service's error message to show. */
+const kMaxDetailLength = 80;
+
+/**
+ * The error message in an error answer: `{error: {message}}` (OpenAI,
+ * Anthropic) or the same in an array (Gemini).
+ */
+const errorDetail = (body: unknown): string => {
+  const first = Array.isArray(body) ? body[0] : body;
+  const error = (first as { error?: { message?: unknown } } | null)?.error;
+  return typeof error?.message === "string" ? error.message.trim() : "";
+};
+
+/**
+ * An HTTP error. Gemini answers a bad key with 400 (API_KEY_INVALID), so a
+ * 400 that is about the key counts as a refused key too.
+ */
+const httpError = (status: number, body: unknown): AiError => {
+  const detail = errorDetail(body);
+  const aboutKey =
+    status === 400 && /API_KEY_INVALID|API key/i.test(JSON.stringify(body) ?? "");
+  const shown =
+    detail.length > kMaxDetailLength
+      ? detail.slice(0, kMaxDetailLength) + "…"
+      : detail;
+  return aiError(
     status === 429 || status === 503
       ? "busy"
-      : status === 401 || status === 403
+      : status === 401 || status === 403 || aboutKey
         ? "auth"
         : "failed",
-    "HTTP " + status,
+    "HTTP " + status + (shown ? "：" + shown : ""),
     status,
   );
+};
 
 /**
  * How long to wait for the local model: a cold Ollama model takes a while to
@@ -212,7 +237,13 @@ const postJson = async (
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw httpError(response.status);
+      let body: unknown = undefined;
+      try {
+        body = await response.json();
+      } catch {
+        // Not JSON (e.g. a proxy's HTML page): the status will do.
+      }
+      throw httpError(response.status, body);
     }
     return await response.json();
   } catch (e) {
@@ -318,9 +349,34 @@ export const anthropicMessages = async (
 export const kRetryDelayMs = 1000;
 
 /**
+ * What to ask with the second time, or undefined not to ask again: the same
+ * after a busy answer, and without `reasoning_effort` if the request was
+ * refused (HTTP 400, not about the key), as some models do not take it.
+ */
+const retrySettings = (
+  e: unknown,
+  settings: AiSettings,
+): AiSettings | undefined => {
+  const kind = aiErrorKind(e);
+  if (kind === "busy") {
+    return settings;
+  }
+  if (
+    kind === "failed" &&
+    (e as AiError).status === 400 &&
+    settings.reasoningEffort
+  ) {
+    const { reasoningEffort: _dropped, ...rest } = settings;
+    return rest;
+  }
+  return undefined;
+};
+
+/**
  * Asks the model, in the API shape its settings say. If the service is busy
- * (HTTP 429 or 503), asks once more after a short wait, within the same time
- * limit.
+ * (HTTP 429 or 503), asks once more after a short wait; if it refuses the
+ * request with `reasoning_effort` (HTTP 400), asks once more without it.
+ * Both tries share one time limit.
  * @param settings Where the model is.
  * @param messages The conversation.
  * @param fetchImpl The fetch function.
@@ -335,23 +391,26 @@ export const askModel = async (
   timeoutMs = timeoutFor(settings),
   retryDelayMs = kRetryDelayMs,
 ): Promise<string> => {
-  const ask = (ms: number): Promise<string> =>
-    settings.protocol === "anthropic"
-      ? anthropicMessages(settings, messages, fetchImpl, ms)
-      : chatCompletion(settings, messages, fetchImpl, ms);
+  const ask = (s: AiSettings, ms: number): Promise<string> =>
+    s.protocol === "anthropic"
+      ? anthropicMessages(s, messages, fetchImpl, ms)
+      : chatCompletion(s, messages, fetchImpl, ms);
   const deadline = Date.now() + timeoutMs;
   try {
-    return await ask(timeoutMs);
+    return await ask(settings, timeoutMs);
   } catch (e) {
-    if (aiErrorKind(e) !== "busy") {
+    const again = retrySettings(e, settings);
+    if (!again) {
       throw e;
     }
-    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    if (aiErrorKind(e) === "busy") {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
     const left = deadline - Date.now();
     if (left <= 0) {
       throw e;
     }
-    return ask(left);
+    return ask(again, left);
   }
 };
 

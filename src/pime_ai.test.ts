@@ -101,6 +101,68 @@ describe("chatCompletion", () => {
     await expect(kindOf(500)).resolves.toBe("failed");
   });
 
+  test("shows the service's reason, and a 400 about the key is a key problem", async () => {
+    // Gemini wraps its errors in an array.
+    const gemini400 = (message: string, reason: string): FetchLike =>
+      jest.fn(async () => ({
+        ok: false,
+        status: 400,
+        json: async () => [
+          {
+            error: {
+              code: 400,
+              message,
+              status: "INVALID_ARGUMENT",
+              details: [{ reason }],
+            },
+          },
+        ],
+      }));
+    const badKey = await chatCompletion(
+      settings,
+      [],
+      gemini400("API key not valid. Please pass a valid API key.", "API_KEY_INVALID"),
+    ).catch((e) => e);
+    expect(aiErrorKind(badKey)).toBe("auth");
+    expect(badKey.message).toBe("HTTP 400：API key not valid. Please pass a valid API key.");
+
+    const badField = await chatCompletion(
+      settings,
+      [],
+      gemini400("Invalid value for reasoning_effort", "BAD_REQUEST"),
+    ).catch((e) => e);
+    expect(aiErrorKind(badField)).toBe("failed");
+    expect(badField.message).toContain("reasoning_effort");
+
+    // OpenAI and Anthropic send an object; a body that is not JSON is fine too.
+    const openai: FetchLike = async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: { message: "model not found" } }),
+    });
+    await expect(chatCompletion(settings, [], openai)).rejects.toThrow(
+      "HTTP 404：model not found",
+    );
+    const html: FetchLike = async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    });
+    await expect(chatCompletion(settings, [], html)).rejects.toThrow(/^HTTP 502$/);
+  });
+
+  test("keeps the reason short", async () => {
+    const long: FetchLike = async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: "x".repeat(300) } }),
+    });
+    const failure = await chatCompletion(settings, [], long).catch((e) => e);
+    expect(failure.message.length).toBeLessThanOrEqual(100);
+  });
+
   test("gives up after the timeout, as a timeout", async () => {
     const fetchImpl: FetchLike = (_url, init) =>
       new Promise((_resolve, reject) => {
@@ -151,6 +213,37 @@ describe("askModel retries", () => {
     const failure = await askModel(settings, [], fetchImpl, 1000, 0).catch((e) => e);
     expect(aiErrorKind(failure)).toBe("busy");
     expect((fetchImpl as jest.Mock).mock.calls).toHaveLength(2);
+  });
+
+  test("asks again without reasoning_effort if the model refuses the request", async () => {
+    const fetchImpl = statuses(400);
+    await expect(
+      askModel({ ...settings, reasoningEffort: "minimal" }, [], fetchImpl, 1000, 0),
+    ).resolves.toBe("記得帶傘");
+    const bodies = (fetchImpl as jest.Mock).mock.calls.map((c) => JSON.parse(c[1].body));
+    expect(bodies[0].reasoning_effort).toBe("minimal");
+    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+  });
+
+  test("but not for a bad key, nor without reasoning_effort", async () => {
+    const badKey: FetchLike = jest.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => [{ error: { message: "API key not valid." } }],
+    }));
+    const failure = await askModel(
+      { ...settings, reasoningEffort: "minimal" },
+      [],
+      badKey,
+      1000,
+      0,
+    ).catch((e) => e);
+    expect(aiErrorKind(failure)).toBe("auth");
+    expect((badKey as jest.Mock).mock.calls).toHaveLength(1);
+
+    const plain400 = statuses(400);
+    await expect(askModel(settings, [], plain400, 1000, 0)).rejects.toThrow("HTTP 400");
+    expect((plain400 as jest.Mock).mock.calls).toHaveLength(1);
   });
 
   test("not for other errors", async () => {
