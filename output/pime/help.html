@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>小麥注音輸入法 PIME 版本輔助說明</title>
+    <title>混打注音輔助說明</title>
     <link rel="icon" type="image/x-icon" href="images/icon16.png" />
     <link rel="stylesheet" href="css/help.css" />
     <style>
@@ -15,9 +15,59 @@
 
   <body>
     <h1>
-      <img src="images/icon48.png" alt="小麥注音輸入法" style="float: right" />
-      小麥注音輸入法 PIME 版本輔助說明
+      <img src="images/icon48.png" alt="混打注音" style="float: right" />
+      混打注音輔助說明
     </h1>
+    <h2 id="mixed">混打注音的功能</h2>
+    <ul>
+      <li><b>中英混打</b>：直接打，中文英文自動判斷。判斷錯了，組字時單按 <kbd>Shift</kbd> 把那一段中英互換。</li>
+      <li><b>刪除贅字</b>：打太快多按到的鍵（例如兩個注音之間多一個鍵）會自動刪掉，可在選項關閉。</li>
+      <li><b>快捷文字本</b>：打 <kbd>`</kbd> 再按空白鍵叫出常用文字，用數字鍵或 Enter 選。在輸入法選單「編輯快捷文字本」新增，一行一段，<code>\n</code> 代表換行。</li>
+      <li><b>框選查詢</b>：在任何程式選取文字，連按兩下 <kbd>Ctrl</kbd>，顯示注音和中英意思。</li>
+      <li><b>匯入微軟注音詞彙</b>：輸入法選單「匯入微軟注音詞彙…」，支援使用者造詞工具的 <code>.txt</code> 與使用者定義片語的 <code>.dat</code>。</li>
+      <li><b>密碼欄</b>：在密碼或 PIN 欄位，輸入法不會介入，只打英文和數字。</li>
+    </ul>
+
+    <h2 id="ai">AI 助手</h2>
+    <p>AI 助手預設關閉。打開後，只有按下面這些鍵時才會問 AI，密碼欄永遠不會：</p>
+    <ul>
+      <li>組字時按 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>：AI 修正整句，建議放在選字窗。</li>
+      <li>框選查詢後按 <kbd>Ctrl</kbd>+<kbd>E</kbd>：AI 解釋選取的文字。</li>
+      <li>框選查詢後按 <kbd>Ctrl</kbd>+<kbd>R</kbd>：AI 改寫，再按 Enter 取代選取的文字，Esc 取消。</li>
+    </ul>
+    <p>每個功能可以在<a href="options.html">選項</a>的「AI 助手」各自選用本機或雲端。</p>
+
+    <h3>本機 AI（免費）</h3>
+    <p>
+      用 <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>
+      在這台電腦上跑模型，文字不會送出去，也不用任何額度或金鑰。在 PowerShell 執行：
+    </p>
+    <pre>winget install --id Ollama.Ollama -e
+ollama pull qwen2.5:7b</pre>
+    <p>
+      <code>qwen2.5:7b</code> 約 4.7 GB，建議記憶體 16 GB 以上；電腦較舊或沒有獨立顯示卡，可改用
+      <code>qwen2.5:3b</code>（約 1.9 GB，比較快），並在選項把模型名稱改成一樣的。
+    </p>
+
+    <h3>雲端 AI（用你自己的 API 金鑰）</h3>
+    <p>
+      可選 Claude、OpenAI、Google Gemini，或任何 OpenAI 相容的服務。用雲端的功能，會把那段文字送到你選的服務。
+      金鑰用 Windows 加密存在這台電腦，只有你的 Windows 帳號解得開。
+    </p>
+    <ul>
+      <li><b>Claude、OpenAI</b>：要在各自的開發者平台儲值後建立 API 金鑰，費用跟 ChatGPT Plus、Claude Pro 等聊天方案分開計算。</li>
+      <li>
+        <b>Google Gemini</b>：有免費方案。到 Google AI Studio 用 Google 帳號登入、建立 API 金鑰即可，不用綁信用卡。
+        要注意：免費方案送出的內容，Google 可能拿去改進產品，機密文字請別用；免費額度也可能調整。
+      </li>
+    </ul>
+
+    <h3>免費的網頁版或 App 可以用嗎？</h3>
+    <p>
+      不行。ChatGPT、Claude、Gemini 的免費網頁版和 App 都沒有提供給其他程式用的 API，自動操作網頁也違反它們的使用條款。
+      不想花錢的話：常用的「修正整句」用本機 AI，偶爾用的「解釋」「改寫」用 Gemini 免費方案。
+    </p>
+
     <h2>一般輸入</h2>
     <p>
       小麥注音如同大多數的注音輸入法，您只需要輸入注音符號按鍵，然後按下代表四聲的按鍵，就會組合出中文，按下<b>空白鍵</b>可以選擇候選字。除了標準鍵盤配置外，小麥還支援倚天、許氏、倚天26鍵等鍵盤配置，您可以在小麥的<a
