@@ -131,6 +131,14 @@
 <td>框選查詢：顯示中文的注音和英文意思，或英文單字的中文意思</td>
 </tr>
 <tr>
+<td>組字時 <kbd>Ctrl</kbd>+<kbd>Enter</kbd></td>
+<td>AI 修正整句（需在設定開啟「使用本機 AI」）</td>
+</tr>
+<tr>
+<td>框選查詢後 <kbd>Ctrl</kbd>+<kbd>E</kbd>／<kbd>Ctrl</kbd>+<kbd>R</kbd></td>
+<td>AI 解釋／AI 改寫；改寫後按 <kbd>Enter</kbd> 取代選取的文字</td>
+</tr>
+<tr>
 <td>數字鍵盤</td>
 <td>打出來的一定是數字</td>
 </tr>
@@ -138,6 +146,12 @@
 </table>
 <p>上排數字也是注音鍵。整串數字剛好拼成有聲調的注音、而且打在最後時（例如 103 = ㄅㄢˇ），會當成中文；後面接空白或其他字時（103 年）則當成數字。按 Shift 互換後送出，下次同樣的數字會照你上次的選擇。</p>
 <p>中文與英文、數字之間會自動加半形空白（可在設定關閉）。</p>
+<h3 id="本機-ai（ollama）" class="tsd-anchor-link">本機 AI（Ollama）<a href="#本機-ai（ollama）" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>AI 功能預設關閉，用的是你電腦上的模型，文字不會送出去，也不用 API 額度。</p>
+<ol>
+<li>安裝 <a href="https://ollama.com">Ollama</a>，再下載一個中文模型：<code>ollama pull qwen2.5:7b</code>。</li>
+<li>偏好設定 →「AI 助手」→ 打開「使用本機 AI」。模型名稱和服務位址可以改，任何 OpenAI 相容的服務都能用。</li>
+</ol>
 <h3 id="從微軟注音搬過來" class="tsd-anchor-link">從微軟注音搬過來<a href="#從微軟注音搬過來" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>輸入法選單 →「匯入微軟注音詞彙…」，選微軟注音匯出的檔案：「使用者造詞工具」匯出的 <code>.txt</code>，或設定頁「使用者定義的片語」匯出的 <code>.dat</code>。詞會加進使用者詞庫；檔案裡沒有注音的詞，會用詞庫查出讀音（查不到的會略過，完成後會告訴你加了幾個、略過幾個）。</p>
 <h2 id="判斷準確度" class="tsd-anchor-link">判斷準確度<a href="#判斷準確度" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
@@ -203,6 +217,7 @@
 <li><a href="#操作"><span>操作</span></a></li>
 <li>
 <ul>
+<li><a href="#本機-ai（ollama）"><span>本機 <wbr/>AI（<wbr/>Ollama）</span></a></li>
 <li><a href="#從微軟注音搬過來"><span>從微軟注音搬過來</span></a></li></ul></li>
 <li><a href="#判斷準確度"><span>判斷準確度</span></a></li>
 <li><a href="#開發"><span>開發</span></a></li>
