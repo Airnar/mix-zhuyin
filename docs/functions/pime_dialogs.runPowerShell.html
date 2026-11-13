@@ -14,7 +14,7 @@
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="runpowershell"><span class="tsd-kind-call-signature">runPowerShell</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">script</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#runpowershell" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="runpowershell"><span class="tsd-kind-call-signature">runPowerShell</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">script</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#runpowershell" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Runs a script with Windows PowerShell, hidden.</p>
 </div>
@@ -23,11 +23,15 @@
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">script</span>: <span class="tsd-signature-type">string</span></span>
 <div class="tsd-comment tsd-typography"><p>The script.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">input</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> = &quot;&quot;</span></span>
+<div class="tsd-comment tsd-typography"><p>Text for the script's standard input (secrets go here, never
+on the command line).</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></h4><p>What it printed, trimmed.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/df6a8b591820c466151a56ef10f45e6015249dcd/src/pime_dialogs.ts#L70">work/mix-zhuyin/mix-zhuyin/src/pime_dialogs.ts:70</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/36feb0bae4ae1c60ce3f2f4f3ba36cc03074d110/src/pime_dialogs.ts#L72">work/mix-zhuyin/mix-zhuyin/src/pime_dialogs.ts:72</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
