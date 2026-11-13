@@ -33,6 +33,11 @@ using namespace std;
 
 namespace Ime {
 
+// GUID_PROP_INPUTSCOPE from InputScope.h. It is declared there but no import
+// library defines it, so the linker cannot find it; define our own copy.
+static const GUID kGuidPropInputScope =
+    {0x1713dd5a, 0x68e7, 0x4a5b, {0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d}};
+
 TextService::TextService(ImeModule* module):
     module_(module),
     displayAttributeProvider_{ComPtr<DisplayAttributeProvider>::make(module)},
@@ -760,7 +765,7 @@ bool TextService::isPasswordField(ITfContext* context) {
             ITfRange* selectionRange = selection.range;
             auto range = ComPtr<ITfRange>::takeover(std::move(selectionRange));
             ComPtr<ITfReadOnlyProperty> property;
-            if (context->GetAppProperty(GUID_PROP_INPUTSCOPE, &property) != S_OK || !property) {
+            if (context->GetAppProperty(kGuidPropInputScope, &property) != S_OK || !property) {
                 return;
             }
             VARIANT value;
