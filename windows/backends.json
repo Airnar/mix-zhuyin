@@ -1,0 +1,8 @@
+[
+    {
+        "name": "node",
+        "command": "node\\node.exe",
+        "workingDir": "node",
+        "params": "server.js"
+    }
+]

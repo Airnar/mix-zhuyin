@@ -23,5 +23,8 @@ openvanilla-mcbopomofoweb-*.tgz
 .codex
 .playwright-mcp
 test-results
-.antigravityclioutput/mixed-demo/bundle.js*
+.antigravitycli
+output/mixed-demo/bundle.js*
 windows/build/
+output/pime/config_tool.js
+windows/pime/PIMELauncher/target/

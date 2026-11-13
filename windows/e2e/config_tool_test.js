@@ -1,0 +1,70 @@
+// Starts the installed settings page server (config_tool.js) the way the
+// input method does, logs in like the browser would, and reads the settings.
+//
+// Usage: node config_tool_test.js <path to config_tool.js>
+"use strict";
+
+const child_process = require("child_process");
+const fs = require("fs");
+const http = require("http");
+const os = require("os");
+const path = require("path");
+
+const script = path.resolve(process.argv[2]);
+const local = fs.mkdtempSync(path.join(os.tmpdir(), "mixzhuyin-local-"));
+const roaming = fs.mkdtempSync(path.join(os.tmpdir(), "mixzhuyin-roaming-"));
+const child = child_process.spawn(process.execPath, [script, "options"], {
+  env: Object.assign({}, process.env, { LOCALAPPDATA: local, APPDATA: roaming }),
+  stdio: "inherit",
+});
+
+function request(options, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(Object.assign({ host: "127.0.0.1" }, options), (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => (data += c));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+    });
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function main() {
+  const launch = path.join(local, "MixZhuyin", "launch_options.html");
+  for (let i = 0; i < 100 && !fs.existsSync(launch); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const html = fs.readFileSync(launch, "utf8");
+  const port = Number(/127\.0\.0\.1:(\d+)\//.exec(html)[1]);
+  const token = /name="token" value="([0-9a-f]+)"/.exec(html)[1];
+
+  const login = await request(
+    { port, method: "POST", path: "/login/options", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    `token=${token}`
+  );
+  if (login.status !== 302) throw new Error(`login: ${login.status}`);
+  const cookie = String(login.headers["set-cookie"]).split(";")[0];
+
+  const page = await request({ port, method: "GET", path: "/options.html" });
+  if (page.status !== 200 || !page.body.includes("混打注音偏好設定")) throw new Error("options.html");
+
+  const config = await request({ port, method: "GET", path: "/config", headers: { Cookie: cookie } });
+  const settings = JSON.parse(config.body);
+  if (settings.candidate_font_name !== "Microsoft JhengHei UI") throw new Error(`config: ${config.body}`);
+  console.log("PASS  settings page server answers on port " + port);
+}
+
+main().then(
+  () => {
+    child.kill();
+    process.exit(0);
+  },
+  (e) => {
+    console.error(e);
+    child.kill();
+    process.exit(1);
+  }
+);

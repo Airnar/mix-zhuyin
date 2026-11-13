@@ -41,15 +41,16 @@
 
 ## 安裝（Windows）
 
-混打注音裝在 [PIME](https://github.com/EasyIME/PIME) 輸入法平台裡（小麥注音的 Windows 版也是用 PIME）。
+1. 下載並執行 `MixZhuyin-<版本>-setup.exe`。安裝程式沒有數位簽章，Windows 會顯示 SmartScreen 警告，按「其他資訊 → 仍要執行」。
+2. 按 <kbd>Win</kbd> + <kbd>空白鍵</kbd> 切換到「混打注音」。
 
-1. 到 [PIME Releases](https://github.com/EasyIME/PIME/releases) 下載 **PIME 2.0**（目前是 2.0.0-beta4，標示為 Pre-release；頁面上標「Latest」的 1.3.0 比較舊，內建的 Node.js 是 6 版）。安裝時選「**完整安裝**」，或至少勾選「小麥注音」，這樣才會裝 PIME 的 Node.js 與 Python 執行環境。
-2. 下載並執行 `MixZhuyin-<版本>-setup.exe`。安裝程式沒有數位簽章，Windows 會顯示 SmartScreen 警告，按「其他資訊 → 仍要執行」。
-3. 按 <kbd>Win</kbd> + <kbd>空白鍵</kbd> 切換到「混打注音」。
+安裝程式已經包含所需的一切（輸入法框架、Node.js 執行環境），不用另外安裝 PIME。需要 64 位元的 Windows 10 或 11（x64 或 ARM64）。
 
-混打注音有自己的名稱與設定資料夾（`%APPDATA%\PIME\mixzhuyin`），可以和小麥注音同時安裝。解除安裝會保留你的使用者詞庫。
+- 輸入法框架是 [PIME](https://github.com/EasyIME/PIME) 改名後自行編譯的版本，可以和 PIME 同時安裝；原始碼與修改紀錄在 [`windows/pime`](windows/pime/UPSTREAM.md)。
+- 如果之前裝過 PIME 外掛版的混打注音，新版安裝時會自動把它從 PIME 移除，使用者詞庫、設定和學習紀錄會從 `%APPDATA%\PIME\mixzhuyin` 複製到新的 `%APPDATA%\MixZhuyin`。
+- 解除安裝會保留 `%APPDATA%\MixZhuyin` 裡的資料。
 
-偏好設定在工作列輸入法圖示的右鍵選單 →「偏好設定」。選字窗可以選字型（預設微軟正黑體）、字體大小、直排或橫排，設定頁有即時預覽。選字窗的底色與數字顏色是 PIME 固定的，改不了。
+偏好設定在工作列輸入法圖示的右鍵選單 →「偏好設定」。選字窗可以選字型（預設微軟正黑體）、字體大小、直排或橫排，設定頁有即時預覽。選字窗會跟著 Windows 的淺色／深色模式變換；開啟「高對比」時改用系統配色。
 
 ## 操作
 

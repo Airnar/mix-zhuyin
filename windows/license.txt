@@ -21,6 +21,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+其他元件：
+- 輸入法框架（MixZhuyinTextService.dll、MixZhuyinLauncher.exe）改自 PIME
+  （https://github.com/EasyIME/PIME）與 libIME2，採 LGPL 2.0 授權，全文見
+  安裝資料夾的 licenses\LGPL-2.0.txt；修改過的原始碼在混打注音的 GitHub
+  儲存庫 windows/pime 資料夾。
+- Node.js 執行環境（node\node.exe）採 MIT 授權，見 licenses\Node.js-LICENSE.txt。
+- nlohmann/json 採 MIT 授權。
+
 資料授權：
 - 英文詞頻資料衍生自 wordfreq（Robyn Speer），採 CC BY-SA 4.0。
 - 語言模型資料衍生自中文維基百科（CC BY-SA 4.0）與 Traditional Chinese C4
