@@ -40,7 +40,11 @@ if ($uninst.GetValue("PIMEDir")) { throw "Uninstall entry still belongs to the P
 # Start menu: a shortcut that opens the settings page through the launcher.
 $link = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\混打注音 偏好設定.lnk"
 if (-not (Test-Path -LiteralPath $link)) { throw "Start menu shortcut missing" }
-$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
+# WScript.Shell cannot open a path outside the ANSI code page (the runner's
+# is not Chinese), so read a copy with a plain name.
+$copy = Join-Path $env:TEMP "mixzhuyin-settings-check.lnk"
+Copy-Item -LiteralPath $link -Destination $copy -Force
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($copy)
 if ($shortcut.TargetPath -notlike "*\MixZhuyinLauncher.exe") { throw "Shortcut target is $($shortcut.TargetPath)" }
 if ($shortcut.Arguments -ne "/settings") { throw "Shortcut arguments are $($shortcut.Arguments)" }
 "Start menu shortcut: $($shortcut.TargetPath) $($shortcut.Arguments)"
