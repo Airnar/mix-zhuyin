@@ -14,12 +14,12 @@
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="askmodel"><span class="tsd-kind-call-signature">askModel</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">settings</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.AiSettings.html" class="tsd-signature-type tsd-kind-interface">AiSettings</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">messages</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.ChatMessage.html" class="tsd-signature-type tsd-kind-interface">ChatMessage</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">fetchImpl</span><span class="tsd-signature-symbol">:</span> <a href="../types/pime_ai.FetchLike.html" class="tsd-signature-type tsd-kind-type-alias">FetchLike</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">timeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">retryDelayMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#askmodel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="askmodel"><span class="tsd-kind-call-signature">askModel</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">settings</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.AiSettings.html" class="tsd-signature-type tsd-kind-interface">AiSettings</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">messages</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/pime_ai.ChatMessage.html" class="tsd-signature-type tsd-kind-interface">ChatMessage</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">fetchImpl</span><span class="tsd-signature-symbol">:</span> <a href="../types/pime_ai.FetchLike.html" class="tsd-signature-type tsd-kind-type-alias">FetchLike</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">timeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">retryDelayMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">log</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">line</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#askmodel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Asks the model, in the API shape its settings say. If the service is busy
 (HTTP 429 or 503), asks once more after a short wait; if it refuses the
-request with <code>reasoning_effort</code> (HTTP 400), asks once more without it.
-Both tries share one time limit.</p>
+request with <code>reasoning_effort</code> (HTTP 400, not about the key), asks again
+with a lighter one (minimal → low → none). All tries share one time limit.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -34,15 +34,19 @@ Both tries share one time limit.</p>
 <div class="tsd-comment tsd-typography"><p>The fetch function.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">timeoutMs</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = ...</span></span>
-<div class="tsd-comment tsd-typography"><p>Give up after this long, both tries together.</p>
+<div class="tsd-comment tsd-typography"><p>Give up after this long, all tries together.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">retryDelayMs</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = kRetryDelayMs</span></span>
-<div class="tsd-comment tsd-typography"><p>How long to wait before the second try.</p>
+<div class="tsd-comment tsd-typography"><p>How long to wait before asking a busy service again.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">log</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">line</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol"> = ...</span></span>
+<div class="tsd-comment tsd-typography"><p>Told how each try went (model, reasoning, result, time); never
+the key or the text.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></h4><p>The answer.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/b62a3f05624200d92e20e422f7fd51164826b55c/src/pime_ai.ts#L387">work/mix-zhuyin/mix-zhuyin/src/pime_ai.ts:387</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/Airnar/mix-zhuyin/blob/e4fe7af4da76d349f315ccd45f2da9adac830c4c/src/pime_ai.ts#L380">work/mix-zhuyin/mix-zhuyin/src/pime_ai.ts:380</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
