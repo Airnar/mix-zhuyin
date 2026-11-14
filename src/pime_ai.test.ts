@@ -13,6 +13,7 @@ import {
   correctionPrompt,
   explainPrompt,
   FetchLike,
+  forgetRefusedEfforts,
   kAnthropicVersion,
   kCloudProviders,
   kCloudTimeoutMs,
@@ -187,6 +188,56 @@ describe("chatCompletion", () => {
 });
 
 describe("askModel retries", () => {
+  beforeEach(() => forgetRefusedEfforts());
+
+  const efforts = (f: FetchLike): (string | undefined)[] =>
+    (f as jest.Mock).mock.calls.map((c) => JSON.parse(c[1].body).reasoning_effort);
+
+  test("remembers the effort a model refused and skips it next time", async () => {
+    const minimal = { ...settings, reasoningEffort: "minimal" };
+    // The lighter effort was taken (the service was only busy), so it is learned.
+    const first = statuses(400, 503);
+    await askModel(minimal, [], first, 1000, 0);
+    expect(efforts(first)).toEqual(["minimal", "low", "low"]);
+
+    const second = statuses();
+    await askModel(minimal, [], second, 1000, 0);
+    expect(efforts(second)).toEqual(["low"]);
+
+    // Another model starts over.
+    const other = statuses();
+    await askModel({ ...minimal, model: "other" }, [], other, 1000, 0);
+    expect(efforts(other)).toEqual(["minimal"]);
+  });
+
+  test("learns nothing from a request that is refused whatever the effort", async () => {
+    const minimal = { ...settings, reasoningEffort: "minimal" };
+    await askModel(minimal, [], statuses(400, 400, 400), 1000, 0).catch(() => undefined);
+    const next = statuses();
+    await askModel(minimal, [], next, 1000, 0);
+    expect(efforts(next)).toEqual(["minimal"]);
+  });
+
+  test("after a busy answer, a try that hangs is cut short and counts as busy", async () => {
+    let calls = 0;
+    const fetchImpl: FetchLike = (_url, init) => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve({ ok: false, status: 503, json: async () => ({}) });
+      }
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    };
+    const startedAt = Date.now();
+    const failure = await askModel(settings, [], fetchImpl, 5000, 0, undefined, 30).catch(
+      (e) => e,
+    );
+    expect(aiErrorKind(failure)).toBe("busy");
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(calls).toBe(2);
+  });
+
   // Answers with each status in turn, then 200.
   const statuses = (...codes: number[]): FetchLike => {
     let i = 0;
@@ -224,6 +275,7 @@ describe("askModel retries", () => {
     ).resolves.toBe("記得帶傘");
     expect(bodiesOf(once).map((b) => b.reasoning_effort)).toEqual(["minimal", "low"]);
 
+    forgetRefusedEfforts();
     const twice = statuses(400, 400);
     await expect(
       askModel({ ...settings, reasoningEffort: "minimal" }, [], twice, 1000, 0),
@@ -234,6 +286,7 @@ describe("askModel retries", () => {
       undefined,
     ]);
 
+    forgetRefusedEfforts();
     const always = statuses(400, 400, 400, 400);
     await expect(
       askModel({ ...settings, reasoningEffort: "minimal" }, [], always, 1000, 0),

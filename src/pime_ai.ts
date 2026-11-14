@@ -363,11 +363,39 @@ const lighterEffort = (settings: AiSettings): AiSettings | undefined => {
 /** At most this many tries per question. */
 const kMaxTries = 3;
 
+/** After a busy answer, the next try gets at most this long. */
+export const kBusyRetryTimeoutMs = 10000;
+
+/**
+ * The `reasoning_effort` each model took after refusing a stronger one
+ * ("" for none), so later questions do not pay for the refusal again.
+ * Kept for as long as the backend runs.
+ */
+const learnedEfforts = new Map<string, string>();
+
+const effortKey = (settings: AiSettings): string =>
+  settings.baseUrl + "|" + settings.model;
+
+/** Forgets which `reasoning_effort` each model refused (for tests). */
+export const forgetRefusedEfforts = (): void => learnedEfforts.clear();
+
+/** The settings to start with: a learned lighter effort replaces the asked one. */
+const withLearnedEffort = (settings: AiSettings): AiSettings => {
+  const learned = learnedEfforts.get(effortKey(settings));
+  if (!settings.reasoningEffort || learned === undefined) {
+    return settings;
+  }
+  const { reasoningEffort: _asked, ...rest } = settings;
+  return learned ? { ...rest, reasoningEffort: learned } : rest;
+};
+
 /**
  * Asks the model, in the API shape its settings say. If the service is busy
- * (HTTP 429 or 503), asks once more after a short wait; if it refuses the
- * request with `reasoning_effort` (HTTP 400, not about the key), asks again
- * with a lighter one (minimal → low → none). All tries share one time limit.
+ * (HTTP 429 or 503), asks once more after a short wait, for at most
+ * `busyRetryTimeoutMs`; if that try is busy or too slow as well, the failure
+ * counts as busy. If the model refuses the request with `reasoning_effort`
+ * (HTTP 400, not about the key), asks again with a lighter one (minimal → low
+ * → none) and remembers the one it took. All tries share one time limit.
  * @param settings Where the model is.
  * @param messages The conversation.
  * @param fetchImpl The fetch function.
@@ -375,6 +403,7 @@ const kMaxTries = 3;
  * @param retryDelayMs How long to wait before asking a busy service again.
  * @param log Told how each try went (model, reasoning, result, time); never
  *   the key or the text.
+ * @param busyRetryTimeoutMs How long the try after a busy answer may take.
  * @returns The answer.
  */
 export const askModel = async (
@@ -384,20 +413,31 @@ export const askModel = async (
   timeoutMs = timeoutFor(settings),
   retryDelayMs = kRetryDelayMs,
   log: (line: string) => void = () => undefined,
+  busyRetryTimeoutMs = kBusyRetryTimeoutMs,
 ): Promise<string> => {
   const deadline = Date.now() + timeoutMs;
-  let current = settings;
-  let busyRetried = false;
+  let current = withLearnedEffort(settings);
+  let busyError: unknown = undefined;
+  // True once a lighter effort is being tried and not yet known to be taken.
+  let steppedDown = false;
+  const learn = (): void => {
+    if (steppedDown) {
+      learnedEfforts.set(effortKey(settings), current.reasoningEffort ?? "");
+      steppedDown = false;
+    }
+  };
   for (let tries = 1; ; tries++) {
     const startedAt = Date.now();
     const what =
       current.model + " reasoning=" + (current.reasoningEffort ?? "-") + ": ";
     try {
-      const ms = Math.max(1, deadline - startedAt);
+      const left = Math.max(1, deadline - startedAt);
+      const ms = busyError ? Math.min(left, busyRetryTimeoutMs) : left;
       const answer = await (current.protocol === "anthropic"
         ? anthropicMessages(current, messages, fetchImpl, ms)
         : chatCompletion(current, messages, fetchImpl, ms));
       log(what + "ok after " + (Date.now() - startedAt) + " ms");
+      learn();
       return answer;
     } catch (e) {
       log(
@@ -408,13 +448,23 @@ export const askModel = async (
           " ms",
       );
       const kind = aiErrorKind(e);
+      const refused = kind === "failed" && (e as AiError).status === 400;
+      if (!refused) {
+        // Anything but a refusal means the service took this effort.
+        learn();
+      }
+      if (busyError && (kind === "busy" || kind === "timeout")) {
+        // It said it was busy and then did not answer in time either.
+        throw busyError;
+      }
       let next: AiSettings | undefined;
-      if (kind === "busy" && !busyRetried) {
-        busyRetried = true;
+      if (kind === "busy") {
+        busyError = e;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
         next = current;
-      } else if (kind === "failed" && (e as AiError).status === 400) {
+      } else if (refused) {
         next = lighterEffort(current);
+        steppedDown = next !== undefined;
       }
       if (!next || tries >= kMaxTries || deadline - Date.now() <= 0) {
         throw e;
