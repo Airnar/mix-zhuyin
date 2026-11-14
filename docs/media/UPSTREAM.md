@@ -57,6 +57,11 @@ commits carry the changes. In short:
   field (`{message, duration}`, no edit session needed) shows it with
   `TextService::showLookup` next to the selection. `MessageWindow` wraps
   long or multi-line text and can be created without an edit session.
+- **Settings from the launcher**: `MixZhuyinLauncher.exe /settings[=<page>]`
+  starts the settings server (`node\node.exe` with
+  `node\input_methods\MixZhuyin\config_tool.js <page>`) without a window and
+  exits, before the job object is set up. The installer's Start menu shortcut
+  uses it.
 - **Program name**: `Client::filterKeyDown` adds `app`, the lower-case file
   name of the process the text service is loaded in (`appName()` in
   `PIMEClient.cpp`), so the backend can learn each program's mix of Chinese
