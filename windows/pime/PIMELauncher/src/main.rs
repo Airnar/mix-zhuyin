@@ -120,6 +120,56 @@ struct LauncherArgs {
     is_quit: bool,
     show_help: bool,
     log_file: Option<String>,
+    /// `/settings` or `/settings=<page>`: open that page of the settings
+    /// server and exit (the Start menu shortcut does this).
+    settings_page: Option<String>,
+}
+
+/// The page `/settings` opens: the one named, if it looks like a page name,
+/// else the options page. The settings server refuses pages it does not have.
+fn settings_page_name(value: Option<&str>) -> String {
+    match value {
+        Some(page)
+            if !page.is_empty()
+                && page.len() <= 32
+                && page.chars().all(|c| c.is_ascii_lowercase() || c == '_') =>
+        {
+            page.to_string()
+        }
+        _ => "options".to_string(),
+    }
+}
+
+/// node.exe and the settings server script under the install folder.
+fn settings_server_paths(root: &std::path::Path) -> (PathBuf, PathBuf) {
+    let node_dir = root.join("node");
+    (
+        node_dir.join("node.exe"),
+        node_dir
+            .join("input_methods")
+            .join("MixZhuyin")
+            .join("config_tool.js"),
+    )
+}
+
+/// Starts the settings server without a console window; it opens the page in
+/// the browser and exits by itself when idle.
+fn open_settings(page: &str) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let root = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let (node, script) = settings_server_paths(&root);
+    let _ = std::process::Command::new(node)
+        .arg(script)
+        .arg(page)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
 }
 
 impl LauncherArgs {
@@ -136,6 +186,11 @@ impl LauncherArgs {
                 "/log-file" => parsed.log_file = iter.next().cloned(),
                 _ if arg.starts_with("/log-file=") => {
                     parsed.log_file = arg.split_once('=').map(|(_, v)| v.to_string());
+                }
+                "/settings" => parsed.settings_page = Some(settings_page_name(None)),
+                _ if arg.starts_with("/settings=") => {
+                    parsed.settings_page =
+                        Some(settings_page_name(arg.split_once('=').map(|(_, v)| v)));
                 }
                 _ => {}
             }
@@ -161,6 +216,7 @@ OPTIONS:
     /console            Open a console window with live DEBUG logs
     /log-file <PATH>    Dump DEBUG logs to the specified file (or /log-file=<PATH>)
     /quit               Gracefully terminate the running MixZhuyinLauncher instance
+    /settings[=<PAGE>]  Open the settings page (options, user_phrases, snippets, help) and exit
     /help, /?           Print this help message
 "#
     );
@@ -219,11 +275,17 @@ fn setup_logging(args: &LauncherArgs) {
 
 #[tokio::main]
 async fn main() {
-    assign_process_to_job_object();
-    setup_error_mode();
-
     let raw_args: Vec<String> = std::env::args().collect();
     let args = LauncherArgs::parse(&raw_args);
+
+    // Before the job object: the settings server must outlive this process.
+    if let Some(page) = &args.settings_page {
+        open_settings(page);
+        return;
+    }
+
+    assign_process_to_job_object();
+    setup_error_mode();
 
     if args.show_help {
         print_help();
@@ -460,5 +522,25 @@ mod tests {
         let args6 = vec!["PIMELauncher.exe".into(), "/log-file".into()];
         let p6 = LauncherArgs::parse(&args6);
         assert_eq!(p6.log_file, None);
+        assert_eq!(p6.settings_page, None);
+    }
+
+    #[test]
+    fn test_settings_page() {
+        let parse = |arg: &str| {
+            LauncherArgs::parse(&["MixZhuyinLauncher.exe".to_string(), arg.to_string()])
+                .settings_page
+        };
+        assert_eq!(parse("/settings"), Some("options".to_string()));
+        assert_eq!(parse("/settings=user_phrases"), Some("user_phrases".to_string()));
+        // Anything that is not a plain page name opens the options page.
+        assert_eq!(parse("/settings="), Some("options".to_string()));
+        assert_eq!(parse("/settings=../x"), Some("options".to_string()));
+        assert_eq!(parse("/settings=a b"), Some("options".to_string()));
+
+        let (node, script) = settings_server_paths(std::path::Path::new("root"));
+        assert!(node.ends_with("node/node.exe") || node.ends_with("node\\node.exe"));
+        assert!(script.ends_with("config_tool.js"));
+        assert!(script.starts_with("root"));
     }
 }

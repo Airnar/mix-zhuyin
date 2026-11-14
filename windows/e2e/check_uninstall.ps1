@@ -18,6 +18,8 @@ $run = $hklm64.OpenSubKey("SOFTWARE\Microsoft\Windows\CurrentVersion\Run")
 if ($run.GetValue("MixZhuyinLauncher")) { throw "Auto-start entry remains" }
 if ($hklm64.OpenSubKey("SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MixZhuyin")) { throw "Uninstall entry remains" }
 if ($hklm64.OpenSubKey("SOFTWARE\MixZhuyin")) { throw "Product key remains" }
+$link = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\混打注音 偏好設定.lnk"
+if (Test-Path -LiteralPath $link) { throw "Start menu shortcut remains" }
 
 & (Join-Path $PSScriptRoot "check_profile_numbering.ps1")
 "Uninstalled cleanly"

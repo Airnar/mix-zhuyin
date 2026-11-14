@@ -95,6 +95,25 @@ jobs:
           $dir = Join-Path $env:ProgramFiles "MixZhuyin"
           & "$dir\node\node.exe" windows\e2e\config_tool_test.js "$dir\node\input_methods\MixZhuyin\config_tool.js"
           if ($LASTEXITCODE -ne 0) { throw "Settings page server test failed" }
+      - name: Open the settings page through the launcher
+        shell: pwsh
+        run: |
+          # What the Start menu shortcut runs: the launcher starts the settings
+          # server (node config_tool.js options) without a window and exits.
+          $dir = Join-Path $env:ProgramFiles "MixZhuyin"
+          $servers = { Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+            Where-Object { $_.CommandLine -like "*config_tool.js*options*" } }
+          & $servers | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+          $launcher = Start-Process "$dir\MixZhuyinLauncher.exe" -ArgumentList '/settings' -PassThru
+          if (-not $launcher.WaitForExit(15000)) { throw "The launcher did not exit after /settings" }
+          Start-Sleep -Seconds 3
+          $found = @(& $servers)
+          if ($found.Count -lt 1) { throw "The settings server did not start" }
+          "Settings server: $($found[0].CommandLine)"
+          $found | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+          if (-not (Get-Process MixZhuyinLauncher -ErrorAction SilentlyContinue)) {
+            throw "The running launcher was stopped by /settings"
+          }
       - name: Uninstall silently
         shell: pwsh
         run: |

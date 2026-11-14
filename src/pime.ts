@@ -34,6 +34,7 @@ import {
   runPowerShell,
 } from "./pime_dialogs";
 import { guardedResponse, installCrashGuards } from "./pime_guard";
+import { isOpenSettingsHotkey, Throttle } from "./pime_hotkeys";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
 import {
   kMaxLearnFileBytes,
@@ -921,6 +922,9 @@ class PimeMcBopomofo {
    * input method, so no Python is needed.
    * @param page "options", "user_phrases", "snippets" or "help".
    */
+  /** Keeps one press of the settings shortcut from opening two pages. */
+  readonly settingsHotkeyThrottle = new Throttle(2000);
+
   public openConfigTool(page: string): void {
     const script = path.join(__dirname, "config_tool.js");
     console.log("Run " + script + " " + page);
@@ -1293,6 +1297,17 @@ const respond = (request: any): any => {
     // program's mix of Chinese and English is learned on its own.
     if (typeof request.app === "string") {
       pimeMcBopomofo.inputController.setMixedApp(request.app);
+    }
+
+    // Ctrl+Alt+, opens the settings page, in Chinese or English mode; what
+    // is being composed stays as it is.
+    if (isOpenSettingsHotkey(keyCode, keyStates)) {
+      pimeMcBopomofo.isShiftHold = false;
+      if (pimeMcBopomofo.settingsHotkeyThrottle.allow(Date.now())) {
+        pimeMcBopomofo.openConfigTool("options");
+      }
+      pimeMcBopomofo.isLastFilterKeyDownHandled = true;
+      return Object.assign({}, responseTemplate, { return: true });
     }
 
     // AI keys: Ctrl+Enter while composing; Ctrl+E / Ctrl+R after a lookup;

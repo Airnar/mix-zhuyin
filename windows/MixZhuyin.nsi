@@ -36,6 +36,7 @@ SetCompressor /SOLID lzma
 !define CLSID "{A64DF4E9-E913-47D2-A89A-CF3134688E0D}"
 !define HOMEPAGE "https://github.com/Airnar/mix-zhuyin"
 !define IME_ICON "node\input_methods\MixZhuyin\icon.ico"
+!define SETTINGS_LINK "$SMPROGRAMS\混打注音 偏好設定.lnk"
 
 Name "${PRODUCT_NAME} ${VERSION}"
 Caption "${PRODUCT_NAME} ${VERSION} 安裝程式"
@@ -236,6 +237,9 @@ Section "Install"
   WriteRegDWORD HKLM "${UNINST_KEY}" "NoModify" 1
   WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
 
+  ; Start menu: the settings page, without going through the tray icon.
+  CreateShortCut "${SETTINGS_LINK}" "$INSTDIR\${LAUNCHER}" "/settings" "$INSTDIR\${IME_ICON}"
+
   !insertmacro StartLauncher
 SectionEnd
 
@@ -256,6 +260,7 @@ Section "Uninstall"
   DeleteRegValue HKLM "${RUN_KEY}" "MixZhuyinLauncher"
   DeleteRegKey HKLM "${PRODUCT_KEY}"
   DeleteRegKey HKLM "${UNINST_KEY}"
+  Delete "${SETTINGS_LINK}"
 
   !insertmacro SafeDeleteBinaries
   RMDir /r /REBOOTOK "$INSTDIR\node"

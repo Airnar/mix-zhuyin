@@ -36,3 +36,11 @@ $uninst = $hklm64.OpenSubKey("SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstal
 if (-not $uninst) { throw "Uninstall entry missing" }
 if ($uninst.GetValue("PIMEDir")) { throw "Uninstall entry still belongs to the PIME add-on" }
 "Installed $($uninst.GetValue('DisplayVersion')) in $dir"
+
+# Start menu: a shortcut that opens the settings page through the launcher.
+$link = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\混打注音 偏好設定.lnk"
+if (-not (Test-Path -LiteralPath $link)) { throw "Start menu shortcut missing" }
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
+if ($shortcut.TargetPath -notlike "*\MixZhuyinLauncher.exe") { throw "Shortcut target is $($shortcut.TargetPath)" }
+if ($shortcut.Arguments -ne "/settings") { throw "Shortcut arguments are $($shortcut.Arguments)" }
+"Start menu shortcut: $($shortcut.TargetPath) $($shortcut.Arguments)"
