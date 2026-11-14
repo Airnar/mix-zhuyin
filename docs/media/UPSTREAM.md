@@ -57,6 +57,10 @@ commits carry the changes. In short:
   field (`{message, duration}`, no edit session needed) shows it with
   `TextService::showLookup` next to the selection. `MessageWindow` wraps
   long or multi-line text and can be created without an edit session.
+- **Program name**: `Client::filterKeyDown` adds `app`, the lower-case file
+  name of the process the text service is loaded in (`appName()` in
+  `PIMEClient.cpp`), so the backend can learn each program's mix of Chinese
+  and English separately.
 - **Asking again later**: a response field `refreshAfter` (milliseconds)
   makes the text service set a thread timer (`TextService::scheduleRefresh`)
   and then call the backend's new `onRefresh` method with an asynchronous
