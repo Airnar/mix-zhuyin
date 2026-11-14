@@ -35,6 +35,11 @@ import {
 } from "./pime_dialogs";
 import { guardedResponse, installCrashGuards } from "./pime_guard";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
+import {
+  kMaxLearnFileBytes,
+  LearningResetWatcher,
+  learnTextSummary,
+} from "./pime_learning";
 
 const ChineseConvert = require("chinese_convert");
 import {
@@ -43,7 +48,11 @@ import {
   lookupMessage,
 } from "./pime_lookup";
 import { legacyUserDataDir, migrateUserData, userDataDir } from "./pime_paths";
-import { importPhraseFile, importSummary } from "./pime_phrase_import";
+import {
+  decodeTextFile,
+  importPhraseFile,
+  importSummary,
+} from "./pime_phrase_import";
 import { unprotectSecret } from "./pime_secrets";
 import { defaultSettings, Settings } from "./pime_settings";
 import { kSnippetsTemplate, parseSnippets } from "./pime_snippets";
@@ -101,6 +110,7 @@ enum PimeMcBopomofoCommand {
   ToggleBpmfFontAnnotationSupport = 14,
   EditSnippets = 15,
   ImportMicrosoftPhrases = 16,
+  LearnFromText = 17,
 }
 
 /** Wraps InputController and required states.  */
@@ -291,6 +301,7 @@ class PimeMcBopomofo {
     this.loadUserPhrases();
     this.loadSnippets();
     this.loadMixedLearning();
+    this.loadPersonalModel();
   }
 
   /** Resets the UI state before handling a key. */
@@ -525,7 +536,112 @@ class PimeMcBopomofo {
     this.inputController.setMixedDropStrayKeys(
       this.settings.mixed_drop_stray_keys !== false,
     );
+    this.inputController.setMixedPersonalLearning(
+      this.settings.mixed_personal_learning !== false,
+    );
     this.inputController.setLanguageCode("zh-TW");
+  }
+
+  /** The path to what mixed mode learned about this user. */
+  readonly personalModelPath: string = path.join(
+    this.mcBopomofoUserDataPath,
+    "personal-model.json",
+  );
+
+  private personalModelTimer_: ReturnType<typeof setTimeout> | undefined;
+  private personalModelSaved_ = 0;
+  private learningReset_ = new LearningResetWatcher();
+
+  /** Loads what mixed mode learned about this user. */
+  public loadPersonalModel(): void {
+    fs.readFile(this.personalModelPath, (err, data) => {
+      if (err) {
+        return;
+      }
+      this.inputController.importPersonalModel(data.toString("utf8"));
+      this.personalModelSaved_ = this.inputController.personalModelRevision;
+    });
+  }
+
+  /**
+   * Saves what mixed mode learned about this user, a few seconds after the
+   * last change, through a temporary file so a crash cannot cut it short.
+   */
+  public scheduleSavePersonalModel(): void {
+    if (
+      this.inputController.personalModelRevision === this.personalModelSaved_
+    ) {
+      return;
+    }
+    if (this.personalModelTimer_) {
+      clearTimeout(this.personalModelTimer_);
+    }
+    this.personalModelTimer_ = setTimeout(() => {
+      const revision = this.inputController.personalModelRevision;
+      const temporary = this.personalModelPath + ".tmp";
+      try {
+        if (!fs.existsSync(this.mcBopomofoUserDataPath)) {
+          fs.mkdirSync(this.mcBopomofoUserDataPath, { recursive: true });
+        }
+        fs.writeFileSync(temporary, this.inputController.exportPersonalModel());
+        fs.renameSync(temporary, this.personalModelPath);
+        this.personalModelSaved_ = revision;
+      } catch (e) {
+        console.error("Failed to save the personal model: " + e);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Forgets what mixed mode learned (the settings page asked to): the
+   * personal model and the per-word adjustments, in memory and on disk.
+   */
+  public forgetLearning(): void {
+    for (const timer of [this.personalModelTimer_, this.mixedLearningTimer_]) {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+    this.inputController.clearPersonalModel();
+    this.personalModelSaved_ = this.inputController.personalModelRevision;
+    this.inputController.clearMixedLearning();
+    for (const file of [this.personalModelPath, this.mixedLearningPath]) {
+      fs.unlink(file, () => undefined);
+    }
+  }
+
+  /**
+   * Asks for a text file (notes, chat logs) and learns the user's wording
+   * from it, then says how much it learned.
+   */
+  public learnFromTextFile(): void {
+    runPowerShell(
+      openFileDialogScript(
+        "匯入文字來學習用語",
+        "文字檔 (*.txt;*.md;*.csv)|*.txt;*.md;*.csv|所有檔案 (*.*)|*.*",
+      ),
+    )
+      .then((file) => {
+        if (!file) {
+          return undefined;
+        }
+        let message: string;
+        try {
+          if (fs.statSync(file).size > kMaxLearnFileBytes) {
+            message = "這個檔案太大了（上限 20 MB），請分成幾個檔案再匯入。";
+          } else {
+            const result = this.inputController.learnFromText(
+              decodeTextFile(fs.readFileSync(file)),
+            );
+            this.scheduleSavePersonalModel();
+            message = learnTextSummary(result);
+          }
+        } catch (e) {
+          message = "無法讀取這個檔案：" + e;
+        }
+        return runPowerShell(messageBoxScript("混打注音", message));
+      })
+      .catch((e) => console.error(e));
   }
 
   /** The path to what mixed mode has learned. */
@@ -577,6 +693,7 @@ class PimeMcBopomofo {
         console.log(
           "Unable to read user settings from " + this.userSettingsPath,
         );
+        this.learningReset_.seen(undefined);
         this.writeSettings();
         this.applySettings();
         callback();
@@ -587,12 +704,16 @@ class PimeMcBopomofo {
         console.log("Try to load settings");
         const newSettings = JSON.parse(data.toString());
         this.settings = Object.assign({}, defaultSettings, newSettings);
+        if (this.learningReset_.seen(newSettings.learning_reset_at)) {
+          this.forgetLearning();
+        }
         console.log(
           "Loaded settings: " + JSON.stringify(this.settings, null, 2),
         );
         this.applySettings();
       } catch {
         console.error("Failed to parse settings");
+        this.learningReset_.seen(undefined);
         this.writeSettings();
         this.applySettings();
       }
@@ -892,6 +1013,9 @@ class PimeMcBopomofo {
         this.createUserPhrasesIfNotExists();
         this.importMicrosoftPhrases();
         break;
+      case PimeMcBopomofoCommand.LearnFromText:
+        this.learnFromTextFile();
+        break;
       case PimeMcBopomofoCommand.OpenUserPhrase:
         {
           this.createUserPhrasesIfNotExists();
@@ -1165,6 +1289,12 @@ const respond = (request: any): any => {
 
     const { keyCode, charCode, keyStates } = request;
 
+    // The text service names the program with each key, so that every
+    // program's mix of Chinese and English is learned on its own.
+    if (typeof request.app === "string") {
+      pimeMcBopomofo.inputController.setMixedApp(request.app);
+    }
+
     // AI keys: Ctrl+Enter while composing; Ctrl+E / Ctrl+R after a lookup;
     // Enter / Esc for a rewrite.
     const aiResponse = pimeMcBopomofo.ai.keyDown(
@@ -1291,6 +1421,7 @@ const respond = (request: any): any => {
       pimeMcBopomofo.uiState.commitString
     ) {
       pimeMcBopomofo.scheduleSaveMixedLearning();
+      pimeMcBopomofo.scheduleSavePersonalModel();
     }
     const response = Object.assign({}, responseTemplate, {
       return: handled,
@@ -1430,6 +1561,10 @@ const respond = (request: any): any => {
       {
         text: "匯入微軟注音詞彙…",
         id: PimeMcBopomofoCommand.ImportMicrosoftPhrases,
+      },
+      {
+        text: "匯入文字來學習用語…",
+        id: PimeMcBopomofoCommand.LearnFromText,
       },
       {
         text: "編輯快捷文字本 (&S)",

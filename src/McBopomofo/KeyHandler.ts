@@ -28,6 +28,7 @@ import {
   MixedCandidate,
   MixedComposer,
   MixedDecoder,
+  PersonalModel,
   trigramData,
   TrigramModel,
 } from "../MixedInput";
@@ -276,6 +277,29 @@ export class KeyHandler {
     this.snippets_ = list.slice();
   }
 
+  private personalModel_ = new PersonalModel();
+
+  /**
+   * What mixed mode learns from this user (see {@link PersonalModel}). Set it
+   * to share one model between key handlers.
+   */
+  public get personalModel(): PersonalModel {
+    return this.personalModel_;
+  }
+  public set personalModel(model: PersonalModel) {
+    this.personalModel_ = model;
+    if (this.mixedComposer_) {
+      this.mixedComposer_.decoder.personalModel = model;
+      this.mixedComposer_.decoder.clearCache();
+    }
+  }
+
+  /** Whether mixed mode learns from what the user commits and picks. */
+  public mixedPersonalLearning: boolean = true;
+
+  /** The program being typed in, for learning each one separately. */
+  public mixedApp: string = "";
+
   private mixedComposer_: MixedComposer | undefined;
   private mixedCandidates_: MixedCandidate[] = [];
 
@@ -304,10 +328,13 @@ export class KeyHandler {
         }
         return undefined;
       };
+      decoder.personalModel = this.personalModel_;
       this.mixedComposer_ = new MixedComposer(decoder);
     }
     this.mixedComposer_.decoder.layout = this.keyboardLayout;
     this.mixedComposer_.autoSpace = this.mixedAutoSpace_;
+    this.mixedComposer_.personalLearning = this.mixedPersonalLearning;
+    this.mixedComposer_.app = this.mixedApp;
     if (this.mixedComposer_.decoder.dropStrayKeys !== this.mixedDropStrayKeys_) {
       this.mixedComposer_.decoder.dropStrayKeys = this.mixedDropStrayKeys_;
       this.mixedComposer_.decoder.clearCache();

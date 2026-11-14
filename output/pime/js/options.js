@@ -23,6 +23,7 @@ window.onload = () => {
     mixed_mode: true,
     mixed_auto_space: true,
     mixed_drop_stray_keys: true,
+    mixed_personal_learning: true,
     ai_enabled: false,
     ai_base_url: "http://localhost:11434/v1",
     ai_model: "qwen2.5:7b",
@@ -178,6 +179,8 @@ window.onload = () => {
         settings.mixed_mode === undefined ? true : settings.mixed_mode;
       $("mixed_drop_stray_keys").checked =
         settings.mixed_drop_stray_keys !== false;
+      $("mixed_personal_learning").checked =
+        settings.mixed_personal_learning !== false;
       $("mixed_auto_space").checked =
         settings.mixed_auto_space === undefined
           ? true
@@ -418,6 +421,37 @@ window.onload = () => {
   $("mixed_drop_stray_keys").onchange = (event) => {
     settings.mixed_drop_stray_keys = $("mixed_drop_stray_keys").checked;
     saveSettings(settings);
+  };
+
+  $("mixed_personal_learning").onchange = (event) => {
+    settings.mixed_personal_learning = $("mixed_personal_learning").checked;
+    saveSettings(settings);
+  };
+
+  $("forget_learning").onclick = () => {
+    if (!window.confirm("要清除所有學習資料嗎？這個動作無法復原。")) {
+      return;
+    }
+    const xhttp = new XMLHttpRequest();
+    const done = (ok) => {
+      $("forget_learning_status").textContent = ok
+        ? "學習資料已清除。"
+        : "清除失敗，請再試一次。";
+    };
+    xhttp.onload = function () {
+      let result = {};
+      try {
+        result = JSON.parse(this.responseText);
+      } catch (e) {
+        // Not JSON: treated as a failure below.
+      }
+      done(this.status >= 200 && this.status < 300 && result.return === true);
+    };
+    xhttp.onerror = function () {
+      done(false);
+    };
+    xhttp.open("POST", "/forget_learning");
+    xhttp.send("");
   };
 
   $("mixed_auto_space").onchange = (event) => {

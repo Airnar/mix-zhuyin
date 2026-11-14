@@ -9,6 +9,7 @@ import { LanguageModel, Unigram } from "../Gramambular2";
 import { BopomofoKeyboardLayout, BopomofoSyllable } from "../Mandarin";
 import { BigramModel, kSentenceStart } from "./BigramModel";
 import { EnglishModel } from "./EnglishModel";
+import { PersonalModel } from "./PersonalModel";
 import { TrigramModel } from "./TrigramModel";
 
 /**
@@ -248,6 +249,19 @@ export class MixedDecoder {
    */
   trigramModel: TrigramModel | undefined;
 
+  /**
+   * Optional model of what this user types: phrases and pairs they use,
+   * words they picked, English words of their own, and how much English they
+   * type in each program. Call {@link clearCache} after it learns.
+   */
+  personalModel: PersonalModel | undefined;
+
+  /** The program being typed in (for {@link personalModel}), if known. */
+  app = "";
+
+  /** How much the program leans toward English, set for each decode. */
+  private languageBias_ = 0;
+
   /** Maps a punctuation key to its output in Chinese context. */
   punctuationLookup: (key: string) => string | undefined = (key) =>
     MixedDecoder.defaultFullWidth_.get(key);
@@ -351,9 +365,59 @@ export class MixedDecoder {
           )
           .sort((a, b) => b.score - a.score);
       }
+      if (this.personalModel && !this.personalModel.isEmpty) {
+        result = this.applyPersonal_(reading, result, this.personalModel);
+      }
       this.unigramCache_.set(reading, result);
     }
     return result;
+  }
+
+  /**
+   * Adjusts the phrases for a reading by what the user typed and picked, and
+   * adds the phrases their corrections made. A phrase the user decided on
+   * ranks above the best dictionary phrase for the reading.
+   */
+  private applyPersonal_(
+    reading: string,
+    base: Unigram[],
+    personal: PersonalModel,
+  ): Unigram[] {
+    const own = personal.userPhrases(reading);
+    let top: number | undefined = base.length > 0 ? base[0].score : undefined;
+    let changed = false;
+    const result = base.map((u) => {
+      const lift = personal.lift(reading, u.value);
+      let score = u.score + personal.phraseBonus(reading, u.value);
+      if (lift > 0) {
+        score = Math.max(score, top! + lift);
+      }
+      changed = changed || score !== u.score;
+      return score === u.score ? u : new Unigram(u.value, score);
+    });
+    const known = new Set(base.map((u) => u.value));
+    for (const value of own) {
+      if (known.has(value)) {
+        continue;
+      }
+      if (top === undefined) {
+        // No dictionary phrase reads like this: start from its syllables
+        // read one by one, plus a margin for the words that would fit them.
+        const syllables = reading.split("-");
+        if (syllables.length < 2) {
+          continue;
+        }
+        top = 1;
+        for (const syllable of syllables) {
+          const single = this.unigrams_(syllable);
+          top += single.length > 0 ? single[0].score : -6;
+        }
+        top -= this.params.zhTokenPenalty * (syllables.length - 1);
+      }
+      result.push(new Unigram(value, top + personal.lift(reading, value)));
+      changed = true;
+    }
+    return changed ? result.sort((a, b) => b.score - a.score) : base;
   }
 
   /** Phrases for a reading, best first, with learned adjustments applied. */
@@ -362,11 +426,22 @@ export class MixedDecoder {
   }
 
   private englishScore_(word: string): number | undefined {
-    const lp = this.englishModel_.logProbability(word);
+    const personal = this.personalModel;
+    let lp = this.englishModel_.logProbability(word);
     if (lp === undefined) {
-      return undefined;
+      // A word of the user's own, once they typed it a few times.
+      lp = personal?.wordScore(word);
+      if (lp === undefined) {
+        return undefined;
+      }
+    } else if (personal) {
+      lp += personal.wordBonus(word);
     }
-    return lp + (this.englishBias.get(word) ?? 0);
+    return (
+      lp +
+      (this.englishBias.get(word) ?? 0) +
+      (personal ? personal.appWordBias(this.app, word) : 0)
+    );
   }
 
   /**
@@ -552,6 +627,8 @@ export class MixedDecoder {
       if (/[A-Z]/.test(word)) {
         cost -= P.uppercaseBonus;
       }
+      // In a program where the user types more English, English is likelier.
+      cost -= this.languageBias_;
       let end = j;
       let text = word;
       if (j < n && raw[j] === " ") {
@@ -698,6 +775,7 @@ export class MixedDecoder {
     const P = this.params;
     const n = raw.length;
     const final = options.final === true;
+    this.languageBias_ = this.personalModel?.languageBias(this.app) ?? 0;
     const forced: (MixedLanguage | null)[] = new Array(n).fill(null);
     for (const f of options.forced ?? []) {
       for (let p = f.start; p < f.end && p < n; p++) {
@@ -839,7 +917,8 @@ export class MixedDecoder {
     tokens.reverse();
     const finalTokens =
       (this.bigramModel && P.bigramWeight > 0) ||
-      (this.trigramModel && P.trigramWeight > 0)
+      (this.trigramModel && P.trigramWeight > 0) ||
+      (this.personalModel && !this.personalModel.isEmpty)
         ? this.rescoreChinese_(tokens, options)
         : tokens;
 
@@ -901,6 +980,7 @@ export class MixedDecoder {
     const P = this.params;
     const bigram = this.bigramModel;
     const trigram = this.trigramModel;
+    const personal = this.personalModel;
     // The context bonus for `next` after `prev` (and the word before it).
     const contextBonus = (
       prev2: string | null,
@@ -913,6 +993,9 @@ export class MixedDecoder {
       let bonus = bigram ? P.bigramWeight * bigram.bonus(prev, next) : 0;
       if (trigram && prev2 !== null) {
         bonus += P.trigramWeight * trigram.bonus(prev2, prev, next);
+      }
+      if (personal) {
+        bonus += personal.pairBonus(prev, next);
       }
       return bonus;
     };

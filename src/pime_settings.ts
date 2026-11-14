@@ -76,6 +76,16 @@ export interface Settings {
   mixed_auto_space: boolean;
   /** Mixed mode: drop stray keys typed between Chinese syllables. */
   mixed_drop_stray_keys: boolean;
+  /**
+   * Mixed mode: learn from what the user commits and picks (kept in
+   * `personal-model.json` in the user data folder, never sent anywhere).
+   */
+  mixed_personal_learning: boolean;
+  /**
+   * When the settings page last asked to forget what was learned
+   * (milliseconds since 1970); the backend clears its model on a newer stamp.
+   */
+  learning_reset_at?: number;
   /** Whether the AI keys (Ctrl+Enter, and Ctrl+E / Ctrl+R after a lookup) work. */
   ai_enabled: boolean;
   /** The OpenAI-compatible API root of the model (Ollama by default). */
@@ -130,6 +140,7 @@ export const defaultSettings: Settings = {
   mixed_mode: true,
   mixed_auto_space: true,
   mixed_drop_stray_keys: true,
+  mixed_personal_learning: true,
   ai_enabled: false,
   ai_base_url: kDefaultAiBaseUrl,
   ai_model: kDefaultAiModel,

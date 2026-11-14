@@ -45,6 +45,20 @@
                 </label>
                 <input type="checkbox" class="switch" name="mixed_drop_stray_keys" id="mixed_drop_stray_keys">
             </div>
+            <div class="row">
+                <label class="row-text" for="mixed_personal_learning">
+                    <span class="row-title">自動學習我的用語</span>
+                    <span class="row-desc">從你送出的句子和改過的字，學你常用的詞、詞的搭配和自己的英文單字，也學你在各個程式裡打中文還是英文。資料只存在這台電腦，不會上傳。密碼欄位不會學。</span>
+                </label>
+                <input type="checkbox" class="switch" name="mixed_personal_learning" id="mixed_personal_learning">
+            </div>
+            <div class="row">
+                <div class="row-text">
+                    <span class="row-title">清除學習資料</span>
+                    <span class="row-desc" id="forget_learning_status">忘掉學過的用語、改字紀錄和各程式的中英文習慣，回到剛安裝的樣子。</span>
+                </div>
+                <button type="button" id="forget_learning">清除</button>
+            </div>
         </section>
 
         <section class="card" aria-labelledby="input_title">

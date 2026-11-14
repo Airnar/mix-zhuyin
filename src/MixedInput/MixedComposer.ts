@@ -16,6 +16,7 @@ import {
   PhraseOverride,
   RunSyllable,
 } from "./MixedDecoder";
+import { LearnedToken } from "./PersonalModel";
 
 /** One part of the composing text, for hosts that can style segments. */
 export interface ComposingSegment {
@@ -117,7 +118,28 @@ export class MixedComposer {
   /** The character right before the composition, if known. */
   precedingCharacter = "";
 
+  /**
+   * Whether committed text teaches the decoder's personal model (the phrases,
+   * pairs and English words the user types, and the words they pick).
+   */
+  personalLearning = true;
+
   constructor(readonly decoder: MixedDecoder) {}
+
+  /** The program being typed in, so each one can be learned separately. */
+  get app(): string {
+    return this.decoder.app;
+  }
+
+  set app(value: string) {
+    if (value === this.decoder.app) {
+      return;
+    }
+    this.decoder.app = value;
+    if (!this.isEmpty) {
+      this.update_();
+    }
+  }
 
   get raw(): string {
     return this.raw_;
@@ -578,10 +600,14 @@ export class MixedComposer {
           reading: candidate.reading,
           syllableStarts: p.syllableStarts,
         });
-        const key = candidate.reading + "|" + candidate.value;
-        const v = (this.decoder.phraseBias.get(key) ?? 0) + 1.2;
-        this.decoder.phraseBias.set(key, Math.min(3, v));
-        this.decoder.clearCache();
+        if (!this.decoder.personalModel || !this.personalLearning) {
+          // Without a personal model the pick counts everywhere, at once.
+          // With one it is learned at commit, with the words around it.
+          const key = candidate.reading + "|" + candidate.value;
+          const v = (this.decoder.phraseBias.get(key) ?? 0) + 1.2;
+          this.decoder.phraseBias.set(key, Math.min(3, v));
+          this.decoder.clearCache();
+        }
         this.update_();
         return true;
       }
@@ -627,7 +653,73 @@ export class MixedComposer {
       const delta = t.lang === "zh" ? -0.8 : 0.8;
       const v = (this.decoder.englishBias.get(word) ?? 0) + delta;
       this.decoder.englishBias.set(word, Math.max(-3, Math.min(3, v)));
+      if (this.personalLearning) {
+        // In this program the switch counts more than elsewhere.
+        this.decoder.personalModel?.learnFlip(this.app, word, t.lang);
+      }
     }
+  }
+
+  /**
+   * Teaches the personal model the committed words: what was typed, which
+   * words the user picked, and what those replaced.
+   */
+  private learnPersonal_(tokens: MixedToken[], final: boolean): void {
+    const personal = this.decoder.personalModel;
+    if (!personal || !this.personalLearning || tokens.length === 0) {
+      return;
+    }
+    // What the decoder would have offered without the user's picks.
+    let offered: Map<number, string> | undefined;
+    if (tokens.some((t) => t.isOverride)) {
+      offered = new Map();
+      const plain = this.decoder.decode(
+        this.raw_,
+        this.options_({ overrides: [], final }),
+      );
+      for (const t of plain.tokens) {
+        if (t.type !== MixedTokenType.Chinese || !t.syllables) {
+          continue;
+        }
+        const chars = Array.from(t.output);
+        if (chars.length === t.syllables.length) {
+          t.syllables.forEach((_, k) =>
+            offered!.set(t.syllableStarts![k], chars[k]),
+          );
+        }
+      }
+    }
+    const learned: LearnedToken[] = tokens.map((t) => {
+      if (t.type === MixedTokenType.Chinese && t.reading) {
+        let rejected: string | undefined;
+        if (t.isOverride && offered) {
+          const chars = t
+            .syllableStarts!.slice(0, -1)
+            .map((p) => offered!.get(p));
+          if (chars.every((c) => c !== undefined)) {
+            rejected = chars.join("");
+          }
+        }
+        return {
+          kind: "zh",
+          value: t.output,
+          reading: t.reading,
+          corrected: t.isOverride === true,
+          rejected,
+        };
+      }
+      if (
+        (t.type === MixedTokenType.English ||
+          t.type === MixedTokenType.UnknownWord) &&
+        t.word
+      ) {
+        return { kind: "en", value: t.word };
+      }
+      return { kind: "other", value: t.output };
+    });
+    // English lock is the user's own switch, not what the program is like.
+    personal.learnSentence(learned, this.englishLock ? undefined : this.app);
+    this.decoder.clearCache();
   }
 
   /**
@@ -746,6 +838,7 @@ export class MixedComposer {
     }
     const r = this.decoder.decode(this.raw_, this.options_({ final: true }));
     this.learnFromFlips_(r);
+    this.learnPersonal_(r.tokens, true);
     const text = this.join_(r.tokens, this.precedingCharacter);
     this.precedingCharacter = (this.precedingCharacter + text).slice(-8);
     this.clear();
@@ -771,10 +864,9 @@ export class MixedComposer {
     if (cut === 0) {
       return "";
     }
-    const text = this.join_(
-      tokens.filter((t) => t.end <= cut),
-      this.precedingCharacter,
-    );
+    const committed = tokens.filter((t) => t.end <= cut);
+    this.learnPersonal_(committed, false);
+    const text = this.join_(committed, this.precedingCharacter);
     this.precedingCharacter = (this.precedingCharacter + text).slice(-8);
     this.raw_ = this.raw_.substring(cut);
     this.forced_ = this.forced_
@@ -795,6 +887,14 @@ export class MixedComposer {
     this.focus_ = null;
     this.update_();
     return text;
+  }
+
+  /** Forgets the learned adjustments ({@link exportLearning}). */
+  clearLearning(): void {
+    this.decoder.englishBias.clear();
+    this.decoder.phraseBias.clear();
+    this.decoder.digitsBias.clear();
+    this.decoder.clearCache();
   }
 
   /** Learned adjustments, to save between sessions. */

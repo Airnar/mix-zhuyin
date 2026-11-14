@@ -229,6 +229,37 @@ describe("settings page server", () => {
     expect(cleared.ai_enabled).toBe(true);
   });
 
+  test("forgets what was learned: stamps the settings and deletes the files", async () => {
+    const model = path.join(configDir, "personal-model.json");
+    const learning = path.join(configDir, "mixed-learning.json");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(model, "{}");
+    fs.writeFileSync(learning, "{}");
+    const before = Date.now();
+    const first = JSON.parse((await request("POST", "/forget_learning", "", cookie)).body);
+    expect(first.return).toBe(true);
+    expect(fs.existsSync(model)).toBe(false);
+    expect(fs.existsSync(learning)).toBe(false);
+    const read = (): { learning_reset_at: number; mixed_mode?: boolean } =>
+      JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf8"));
+    const stamp = read().learning_reset_at;
+    expect(stamp).toBeGreaterThanOrEqual(before);
+
+    // Saving the other settings keeps the stamp, whatever the page sends.
+    await request("POST", "/config", JSON.stringify({ mixed_mode: false }), cookie);
+    expect(read().learning_reset_at).toBe(stamp);
+    expect(read().mixed_mode).toBe(false);
+
+    // Asking again always gives a newer stamp, and works with no files.
+    await request("POST", "/forget_learning", "", cookie);
+    expect(read().learning_reset_at).toBeGreaterThan(stamp);
+    expect(read().mixed_mode).toBe(false);
+  });
+
+  test("needs the token to forget what was learned", async () => {
+    expect((await request("POST", "/forget_learning", "")).status).toBe(403);
+  });
+
   test("needs the token to store a key", async () => {
     expect((await request("POST", "/ai_key", "k")).status).toBe(403);
   });

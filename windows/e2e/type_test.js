@@ -110,11 +110,17 @@ const VK_SHIFT = 16;
 // then OnKey*, and OnKey* filters the key again before asking for an edit
 // session. Only on* responses come with an edit session, so only they can
 // change the composition or commit text; filter* responses can't.
+// The program the keys are typed in; the text service sends it with every
+// filterKeyDown.
+let currentApp;
+
 async function pressKey(base, edge, state) {
   const filterMethod = edge === "down" ? "filterKeyDown" : "filterKeyUp";
   const onMethod = edge === "down" ? "onKeyDown" : "onKeyUp";
-  if (!(await send(Object.assign({ method: filterMethod }, base))).return) return false;
-  if (!(await send(Object.assign({ method: filterMethod }, base))).return) return false;
+  const filter = Object.assign({ method: filterMethod }, base);
+  if (edge === "down" && currentApp) filter.app = currentApp;
+  if (!(await send(Object.assign({}, filter))).return) return false;
+  if (!(await send(Object.assign({}, filter))).return) return false;
   const r = await send(Object.assign({ method: onMethod }, base));
   if (r.commitString) state.committed += r.commitString;
   if (typeof r.compositionString === "string") {
@@ -197,6 +203,59 @@ async function refreshUntil(done) {
     await new Promise((resolve) => setTimeout(resolve, r.refreshAfter));
   }
   return undefined;
+}
+
+// Personal learning: a picked word comes back next time, the model is saved
+// with the program's name, and the settings page's "forget" stamp clears it.
+// Module mode only: it teaches the model and changes settings.
+async function testLearning() {
+  let failures = 0;
+  const check = (ok, label) => {
+    if (!ok) failures++;
+    console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
+  };
+  const dir = path.join(process.env.APPDATA, "MixZhuyin");
+  const modelFile = path.join(dir, "personal-model.json");
+  const configFile = path.join(dir, "config.json");
+  currentApp = "e2e-test.exe";
+
+  const first = await typeKeys("w8 gji ");
+  check(first.composing === "他說", `"w8 gji " reads 他說 at first -> ${JSON.stringify(first.composing)}`);
+  const opened = await typeKeys("←←↓");
+  const index = (opened.candidates || []).indexOf("她");
+  check(index > 0 && index < 9, `the candidates for 他 include 她 -> ${JSON.stringify((opened.candidates || []).slice(0, 5))}`);
+  await typeKeys(String(index + 1));
+  const picked = await typeKeys("\n");
+  check(picked.committed === "她說", `picking 她 commits 她說 -> ${JSON.stringify(picked.committed)}`);
+  await typeKeys("\n");
+
+  const again = await typeKeys("w8 gji ");
+  check(again.composing === "她說", `the pick is offered next time -> ${JSON.stringify(again.composing)}`);
+  await typeKeys("⎋");
+
+  // Saved a few seconds after the last change.
+  await new Promise((resolve) => setTimeout(resolve, 6500));
+  let saved = {};
+  try {
+    saved = JSON.parse(fs.readFileSync(modelFile, "utf8"));
+  } catch (e) {
+    saved = { error: String(e) };
+  }
+  check(
+    !!saved.apps && !!saved.apps["e2e-test.exe"] && !!saved.phrases && !!saved.phrases["ㄊㄚ-ㄕㄨㄛ|她說"],
+    `the model is saved with the program's name -> ${JSON.stringify(saved.apps || saved.error)}`
+  );
+
+  // The settings page stamps the settings file to forget.
+  const config = JSON.parse(fs.readFileSync(configFile, "utf8"));
+  fs.writeFileSync(configFile, JSON.stringify(Object.assign(config, { learning_reset_at: Date.now() })));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const forgotten = await typeKeys("w8 gji ");
+  check(forgotten.composing === "他說", `forgetting brings 他說 back -> ${JSON.stringify(forgotten.composing)}`);
+  check(!fs.existsSync(modelFile), "the saved model is deleted");
+  await typeKeys("⎋");
+  currentApp = undefined;
+  return failures;
 }
 
 async function testAi() {
@@ -383,6 +442,7 @@ async function main() {
 
   // AI keys against a fake Ollama (module mode only: it changes settings).
   if (!usePipe) {
+    failures += await testLearning();
     failures += await testAi();
   }
 

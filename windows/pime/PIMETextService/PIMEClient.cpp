@@ -28,6 +28,7 @@
 #include <VersionHelpers.h> // Provided by Windows SDK >= 8.1
 #include <algorithm>
 #include <cctype>
+#include <cwctype>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -48,6 +49,26 @@ static std::string uuidToString(const UUID& uuid) {
 		transform(result.begin(), result.end(), result.begin(), tolower);
 	}
 	return result;
+}
+
+// The program this text service is loaded in, e.g. "notepad.exe" (lower
+// case, without the folder). The backend learns each program's mix of
+// Chinese and English separately.
+static const std::string& appName() {
+	static const std::string name = []() {
+		wchar_t path[MAX_PATH] = { 0 };
+		DWORD length = ::GetModuleFileNameW(nullptr, path, MAX_PATH);
+		std::wstring file(path, length);
+		size_t slash = file.find_last_of(L"\\/");
+		if (slash != std::wstring::npos) {
+			file = file.substr(slash + 1);
+		}
+		for (auto& c : file) {
+			c = static_cast<wchar_t>(::towlower(c));
+		}
+		return utf16ToUtf8(file.c_str());
+	}();
+	return name;
 }
 
 bool uuidFromString(const char* uuidStr, UUID& result) {
@@ -478,6 +499,7 @@ bool Client::filterKeyDown(Ime::KeyEvent& keyEvent) {
 
 	json req = createRpcRequest("filterKeyDown");
 	addKeyEventToRpcRequest(req, keyEvent);
+	req["app"] = appName();
 
 	json ret;
 	callRpcMethod(req, ret);

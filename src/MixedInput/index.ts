@@ -31,5 +31,11 @@ export {
   PhraseOverride,
   RunSyllable,
 } from "./MixedDecoder";
+export {
+  LearnedToken,
+  PersonalModel,
+  PersonalModelLimits,
+} from "./PersonalModel";
+export { PhraseSegmenter, sentencesForLearning } from "./TextLearning";
 export { trigramData } from "./TrigramData";
 export { TrigramModel } from "./TrigramModel";

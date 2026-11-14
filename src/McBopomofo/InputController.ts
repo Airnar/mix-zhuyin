@@ -7,6 +7,7 @@
 
 import { Candidate } from "../Gramambular2";
 import { BopomofoKeyboardLayout } from "../Mandarin";
+import { PersonalModel, sentencesForLearning } from "../MixedInput";
 import {
   CandidateController,
   CandidateWrapper,
@@ -229,6 +230,9 @@ export class InputController {
     const dropStrayKeys = this.keyHandler_.mixedDropStrayKeys;
     const snippets = this.keyHandler_.snippets;
     const mixedLearning = this.keyHandler_.mixedComposer.exportLearning();
+    const personalModel = this.keyHandler_.personalModel;
+    const personalLearning = this.keyHandler_.mixedPersonalLearning;
+    const mixedApp = this.keyHandler_.mixedApp;
 
     const macroConverter = this.lm_.getMacroConverter();
     const converter = this.lm_.getConverter();
@@ -255,6 +259,9 @@ export class InputController {
     this.keyHandler_.restoreSettings(settings);
     this.keyHandler_.mixedDropStrayKeys = dropStrayKeys;
     this.keyHandler_.snippets = snippets;
+    this.keyHandler_.personalModel = personalModel;
+    this.keyHandler_.mixedPersonalLearning = personalLearning;
+    this.keyHandler_.mixedApp = mixedApp;
     this.keyHandler_.mixedComposer.importLearning(mixedLearning);
     this.onError_ = onError;
   }
@@ -716,6 +723,101 @@ export class InputController {
   /** Restores what {@link exportMixedLearning} returned. */
   public importMixedLearning(json: string): void {
     this.keyHandler_.mixedComposer.importLearning(json);
+  }
+
+  /** Forgets what {@link exportMixedLearning} would return. */
+  public clearMixedLearning(): void {
+    this.keyHandler_.mixedComposer.clearLearning();
+  }
+
+  /**
+   * Sets whether mixed mode learns from what the user commits and picks: the
+   * phrases, word pairs and English words they type, and how much English
+   * they type in each program. On by default; nothing leaves the computer.
+   * @param flag Learn.
+   */
+  public setMixedPersonalLearning(flag: boolean): void {
+    this.keyHandler_.mixedPersonalLearning = flag;
+  }
+
+  /**
+   * Tells mixed mode which program is being typed in, so that each one is
+   * learned separately (more English in an editor, more Chinese in a chat).
+   * @param app The program's name, e.g. "code.exe"; empty when unknown.
+   */
+  public setMixedApp(app: string): void {
+    this.keyHandler_.mixedApp = app;
+    // Reaches the composer now, not at the next key.
+    void this.keyHandler_.mixedComposer;
+  }
+
+  /** Goes up whenever the personal model learns, to know when to save it. */
+  public get personalModelRevision(): number {
+    return this.keyHandler_.personalModel.revision;
+  }
+
+  /** What mixed mode learned about this user, as JSON, to keep in a file. */
+  public exportPersonalModel(): string {
+    return this.keyHandler_.personalModel.save();
+  }
+
+  /**
+   * Replaces what mixed mode learned with what {@link exportPersonalModel}
+   * returned. Malformed data is skipped.
+   */
+  public importPersonalModel(json: string): void {
+    const model = new PersonalModel();
+    model.load(json);
+    this.keyHandler_.personalModel = model;
+  }
+
+  /** Forgets everything mixed mode learned about this user. */
+  public clearPersonalModel(): void {
+    this.keyHandler_.personalModel = new PersonalModel();
+  }
+
+  /**
+   * Learns the user's wording from existing text (notes, chat logs): the
+   * phrases and word pairs in it and its English words. Chinese is split into
+   * dictionary phrases, longest first.
+   * @param text The text; only the first two million characters are read.
+   * @returns How many sentences and words were learned.
+   */
+  public learnFromText(text: string): { sentences: number; words: number } {
+    const lm = this.mcBopomofoLm_;
+    const segment = (run: string): { value: string; reading?: string }[] => {
+      const chars = Array.from(run);
+      const phrases: { value: string; reading?: string }[] = [];
+      let i = 0;
+      while (i < chars.length) {
+        let length = Math.min(6, chars.length - i);
+        let reading: string | undefined;
+        for (; length > 0; length--) {
+          reading = lm.getReading(chars.slice(i, i + length).join(""));
+          if (
+            reading !== undefined &&
+            !reading.startsWith("_") &&
+            reading.split("-").length === length
+          ) {
+            break;
+          }
+          reading = undefined;
+        }
+        length = Math.max(1, length);
+        phrases.push({ value: chars.slice(i, i + length).join(""), reading });
+        i += length;
+      }
+      return phrases;
+    };
+    const model = this.keyHandler_.personalModel;
+    const sentences = sentencesForLearning(text.slice(0, 2000000), segment);
+    let words = 0;
+    for (const sentence of sentences) {
+      words += sentence.filter((t) => t.kind !== "other").length;
+      model.learnSentence(sentence);
+    }
+    this.keyHandler_.mixedComposer.decoder.clearCache();
+    return { sentences: sentences.length, words };
   }
 
   /**

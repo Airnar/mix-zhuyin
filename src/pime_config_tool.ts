@@ -224,6 +224,7 @@ export const createConfigHandler = (
       "GET /excluded_phrases",
       "POST /excluded_phrases",
       "POST /ai_key",
+      "POST /forget_learning",
       "GET /snippets",
       "POST /snippets",
       "GET /open_snippets",
@@ -257,9 +258,15 @@ export const createConfigHandler = (
             sendJson(res, { return: false, error: "not a JSON object" });
             return;
           }
-          // Only /ai_key changes the key.
+          // Only /ai_key changes the key, and only /forget_learning the
+          // stamp that tells the backend to forget.
           delete value.ai_cloud_key_set;
-          value.ai_cloud_key_dpapi = readConfig().ai_cloud_key_dpapi ?? "";
+          const stored = readConfig();
+          value.ai_cloud_key_dpapi = stored.ai_cloud_key_dpapi ?? "";
+          delete value.learning_reset_at;
+          if (typeof stored.learning_reset_at === "number") {
+            value.learning_reset_at = stored.learning_reset_at;
+          }
           writeConfig(value);
           sendJson(res, { return: true });
           return;
@@ -270,6 +277,21 @@ export const createConfigHandler = (
           config.ai_cloud_key_dpapi = plain ? await protect(plain) : "";
           writeConfig(config);
           sendJson(res, { return: true, set: !!plain });
+          return;
+        }
+        case "POST /forget_learning": {
+          // The backend watches the settings file and clears what it holds
+          // in memory when the stamp is newer; the files go here, so this
+          // works when no backend is running too.
+          const config = readConfig();
+          const last =
+            typeof config.learning_reset_at === "number" ? config.learning_reset_at : 0;
+          config.learning_reset_at = Math.max(Date.now(), last + 1);
+          for (const name of ["personal-model.json", "mixed-learning.json"]) {
+            fs.rmSync(path.join(configDir, name), { force: true });
+          }
+          writeConfig(config);
+          sendJson(res, { return: true });
           return;
         }
         case "GET /keep_alive":
