@@ -215,14 +215,48 @@ describe("askModel retries", () => {
     expect((fetchImpl as jest.Mock).mock.calls).toHaveLength(2);
   });
 
-  test("asks again without reasoning_effort if the model refuses the request", async () => {
-    const fetchImpl = statuses(400);
+  test("if the model refuses minimal, asks with low, then without", async () => {
+    const bodiesOf = (f: FetchLike): { reasoning_effort?: string }[] =>
+      (f as jest.Mock).mock.calls.map((c) => JSON.parse(c[1].body));
+    const once = statuses(400);
     await expect(
-      askModel({ ...settings, reasoningEffort: "minimal" }, [], fetchImpl, 1000, 0),
+      askModel({ ...settings, reasoningEffort: "minimal" }, [], once, 1000, 0),
     ).resolves.toBe("記得帶傘");
-    const bodies = (fetchImpl as jest.Mock).mock.calls.map((c) => JSON.parse(c[1].body));
-    expect(bodies[0].reasoning_effort).toBe("minimal");
-    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+    expect(bodiesOf(once).map((b) => b.reasoning_effort)).toEqual(["minimal", "low"]);
+
+    const twice = statuses(400, 400);
+    await expect(
+      askModel({ ...settings, reasoningEffort: "minimal" }, [], twice, 1000, 0),
+    ).resolves.toBe("記得帶傘");
+    expect(bodiesOf(twice).map((b) => b.reasoning_effort)).toEqual([
+      "minimal",
+      "low",
+      undefined,
+    ]);
+
+    const always = statuses(400, 400, 400, 400);
+    await expect(
+      askModel({ ...settings, reasoningEffort: "minimal" }, [], always, 1000, 0),
+    ).rejects.toThrow("HTTP 400");
+    expect((always as jest.Mock).mock.calls).toHaveLength(3);
+  });
+
+  test("logs each try without the key or the text", async () => {
+    const lines: string[] = [];
+    const fetchImpl = statuses(400);
+    await askModel(
+      { ...settings, apiKey: "sk-secret", reasoningEffort: "minimal" },
+      [{ role: "user", content: "我今天很開心" }],
+      fetchImpl,
+      1000,
+      0,
+      (line) => lines.push(line),
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^qwen2\.5:7b reasoning=minimal: HTTP 400 after \d+ ms$/);
+    expect(lines[1]).toMatch(/^qwen2\.5:7b reasoning=low: ok after \d+ ms$/);
+    expect(lines.join("\n")).not.toContain("sk-secret");
+    expect(lines.join("\n")).not.toContain("開心");
   });
 
   test("but not for a bad key, nor without reasoning_effort", async () => {

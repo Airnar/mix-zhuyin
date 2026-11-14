@@ -349,39 +349,32 @@ export const anthropicMessages = async (
 export const kRetryDelayMs = 1000;
 
 /**
- * What to ask with the second time, or undefined not to ask again: the same
- * after a busy answer, and without `reasoning_effort` if the request was
- * refused (HTTP 400, not about the key), as some models do not take it.
+ * The next, lighter `reasoning_effort` to try when a model refuses one:
+ * minimal → low → none. Without any, a thinking model may think for long.
  */
-const retrySettings = (
-  e: unknown,
-  settings: AiSettings,
-): AiSettings | undefined => {
-  const kind = aiErrorKind(e);
-  if (kind === "busy") {
-    return settings;
+const lighterEffort = (settings: AiSettings): AiSettings | undefined => {
+  if (!settings.reasoningEffort) {
+    return undefined;
   }
-  if (
-    kind === "failed" &&
-    (e as AiError).status === 400 &&
-    settings.reasoningEffort
-  ) {
-    const { reasoningEffort: _dropped, ...rest } = settings;
-    return rest;
-  }
-  return undefined;
+  const { reasoningEffort, ...rest } = settings;
+  return reasoningEffort === "minimal" ? { ...rest, reasoningEffort: "low" } : rest;
 };
+
+/** At most this many tries per question. */
+const kMaxTries = 3;
 
 /**
  * Asks the model, in the API shape its settings say. If the service is busy
  * (HTTP 429 or 503), asks once more after a short wait; if it refuses the
- * request with `reasoning_effort` (HTTP 400), asks once more without it.
- * Both tries share one time limit.
+ * request with `reasoning_effort` (HTTP 400, not about the key), asks again
+ * with a lighter one (minimal → low → none). All tries share one time limit.
  * @param settings Where the model is.
  * @param messages The conversation.
  * @param fetchImpl The fetch function.
- * @param timeoutMs Give up after this long, both tries together.
- * @param retryDelayMs How long to wait before the second try.
+ * @param timeoutMs Give up after this long, all tries together.
+ * @param retryDelayMs How long to wait before asking a busy service again.
+ * @param log Told how each try went (model, reasoning, result, time); never
+ *   the key or the text.
  * @returns The answer.
  */
 export const askModel = async (
@@ -390,27 +383,44 @@ export const askModel = async (
   fetchImpl: FetchLike,
   timeoutMs = timeoutFor(settings),
   retryDelayMs = kRetryDelayMs,
+  log: (line: string) => void = () => undefined,
 ): Promise<string> => {
-  const ask = (s: AiSettings, ms: number): Promise<string> =>
-    s.protocol === "anthropic"
-      ? anthropicMessages(s, messages, fetchImpl, ms)
-      : chatCompletion(s, messages, fetchImpl, ms);
   const deadline = Date.now() + timeoutMs;
-  try {
-    return await ask(settings, timeoutMs);
-  } catch (e) {
-    const again = retrySettings(e, settings);
-    if (!again) {
-      throw e;
+  let current = settings;
+  let busyRetried = false;
+  for (let tries = 1; ; tries++) {
+    const startedAt = Date.now();
+    const what =
+      current.model + " reasoning=" + (current.reasoningEffort ?? "-") + ": ";
+    try {
+      const ms = Math.max(1, deadline - startedAt);
+      const answer = await (current.protocol === "anthropic"
+        ? anthropicMessages(current, messages, fetchImpl, ms)
+        : chatCompletion(current, messages, fetchImpl, ms));
+      log(what + "ok after " + (Date.now() - startedAt) + " ms");
+      return answer;
+    } catch (e) {
+      log(
+        what +
+          (e instanceof Error ? e.message : String(e)) +
+          " after " +
+          (Date.now() - startedAt) +
+          " ms",
+      );
+      const kind = aiErrorKind(e);
+      let next: AiSettings | undefined;
+      if (kind === "busy" && !busyRetried) {
+        busyRetried = true;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        next = current;
+      } else if (kind === "failed" && (e as AiError).status === 400) {
+        next = lighterEffort(current);
+      }
+      if (!next || tries >= kMaxTries || deadline - Date.now() <= 0) {
+        throw e;
+      }
+      current = next;
     }
-    if (aiErrorKind(e) === "busy") {
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-    }
-    const left = deadline - Date.now();
-    if (left <= 0) {
-      throw e;
-    }
-    return ask(again, left);
   }
 };
 

@@ -194,6 +194,10 @@ class PimeMcBopomofo {
         { ...settings, apiKey },
         messages,
         fetch as unknown as FetchLike,
+        undefined,
+        undefined,
+        // stderr goes to the launcher's log (with /log-file).
+        (line) => console.error("[ai] " + line),
       );
       // Small local models often answer in Simplified Chinese.
       return this.settings.chineseConversion
