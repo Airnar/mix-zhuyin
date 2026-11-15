@@ -343,6 +343,17 @@ async function main() {
   console.log(`PASS  candidate window settings ${JSON.stringify(ui)}`);
 
   let failures = 0;
+  // Ctrl+Alt+, for the settings page is registered with TSF at activation
+  // (keyCode 0xBC, TF_MOD_ALT | TF_MOD_CONTROL). The key itself is not pressed
+  // here: it would start the settings server and a browser.
+  const preserved = (activated.addPreservedKey || [])[0] || {};
+  const preservedOk =
+    preserved.keyCode === 0xbc && preserved.modifiers === 3 && /^\{[0-9A-F-]{36}\}$/.test(preserved.guid || "");
+  if (!preservedOk) failures++;
+  console.log(`${preservedOk ? "PASS" : "FAIL"}  the settings shortcut is registered -> ${JSON.stringify(preserved)}`);
+  const otherKey = await send({ method: "onPreservedKey", guid: "{00000000-0000-0000-0000-000000000000}" });
+  if (otherKey.return !== false) failures++;
+  console.log(`${otherKey.return === false ? "PASS" : "FAIL"}  an unknown preserved key is not claimed`);
   // The third element, when present, is the composition the app shows at the
   // end of the keys.
   for (const [keys, want, wantComposing] of cases) {

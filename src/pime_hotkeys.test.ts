@@ -1,4 +1,9 @@
-import { isOpenSettingsHotkey, Throttle } from "./pime_hotkeys";
+import {
+  isOpenSettingsHotkey,
+  isSettingsPreservedKey,
+  kSettingsPreservedKey,
+  Throttle,
+} from "./pime_hotkeys";
 
 const states = (...down: number[]): number[] => {
   const keyStates = new Array(256).fill(0);
@@ -30,6 +35,27 @@ describe("isOpenSettingsHotkey", () => {
     toggled[VK_MENU] = 1;
     expect(isOpenSettingsHotkey(VK_COMMA, toggled)).toBe(false);
     expect(isOpenSettingsHotkey(VK_COMMA, [])).toBe(false);
+  });
+});
+
+describe("the preserved key for the settings page", () => {
+  test("is Ctrl+Alt+comma, registered with TSF under its own GUID", () => {
+    expect(kSettingsPreservedKey.keyCode).toBe(VK_COMMA);
+    // TF_MOD_ALT | TF_MOD_CONTROL
+    expect(kSettingsPreservedKey.modifiers).toBe(0x0001 | 0x0002);
+    // CLSIDFromString wants braces.
+    expect(kSettingsPreservedKey.guid).toMatch(/^\{[0-9A-F-]{36}\}$/);
+  });
+
+  test("is recognized however the text service spells the GUID", () => {
+    const guid = kSettingsPreservedKey.guid;
+    expect(isSettingsPreservedKey(guid)).toBe(true);
+    expect(isSettingsPreservedKey(guid.toLowerCase())).toBe(true);
+    expect(isSettingsPreservedKey(guid.slice(1, -1))).toBe(true);
+    expect(isSettingsPreservedKey("{00000000-0000-0000-0000-000000000000}")).toBe(false);
+    expect(isSettingsPreservedKey("")).toBe(false);
+    expect(isSettingsPreservedKey(undefined)).toBe(false);
+    expect(isSettingsPreservedKey(42)).toBe(false);
   });
 });
 

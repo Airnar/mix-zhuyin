@@ -34,7 +34,12 @@ import {
   runPowerShell,
 } from "./pime_dialogs";
 import { guardedResponse, installCrashGuards } from "./pime_guard";
-import { isOpenSettingsHotkey, Throttle } from "./pime_hotkeys";
+import {
+  isOpenSettingsHotkey,
+  isSettingsPreservedKey,
+  kSettingsPreservedKey,
+  Throttle,
+} from "./pime_hotkeys";
 import { KeyFromKeyboardEvent, VK_Keys } from "./pime_keys";
 import {
   kMaxLearnFileBytes,
@@ -1156,7 +1161,11 @@ const respond = (request: any): any => {
     const customUi = pimeMcBopomofo.customUiResponse();
     const buttonUi = pimeMcBopomofo.buttonUiResponse();
     pimeMcBopomofo.alreadyAddButton = true;
-    const response = Object.assign({}, responseTemplate, customUi, buttonUi);
+    // Ctrl+Alt+, for the settings page is registered as a TSF preserved key;
+    // the check in filterKeyDown alone did not work on a real keyboard.
+    const response = Object.assign({}, responseTemplate, customUi, buttonUi, {
+      addPreservedKey: [kSettingsPreservedKey],
+    });
     return response;
   }
 
@@ -1169,9 +1178,13 @@ const respond = (request: any): any => {
   }
 
   if (request.method === "onPreservedKey") {
-    console.log(request);
-    const response = Object.assign({}, responseTemplate);
-    return response;
+    if (!isSettingsPreservedKey(request.guid)) {
+      return Object.assign({}, responseTemplate);
+    }
+    if (pimeMcBopomofo.settingsHotkeyThrottle.allow(Date.now())) {
+      pimeMcBopomofo.openConfigTool("options");
+    }
+    return Object.assign({}, responseTemplate, { return: true });
   }
 
   if (request.method === "filterKeyUp") {

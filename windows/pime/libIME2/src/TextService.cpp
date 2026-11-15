@@ -97,6 +97,13 @@ void TextService::removeButton(LangBarButton* button) {
 
 // preserved key
 void TextService::addPreservedKey(UINT keyCode, UINT modifiers, const GUID& guid) {
+    // The backend names its keys again whenever it is activated (also after
+    // it restarted); a key that is already there stays as it is.
+    for (const auto& existing : preservedKeys_) {
+        if (::IsEqualGUID(existing.guid, guid)) {
+            return;
+        }
+    }
     PreservedKey preservedKey;
     preservedKey.guid = guid;
     preservedKey.uVKey = keyCode;
