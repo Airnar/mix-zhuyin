@@ -62,6 +62,9 @@ commits carry the changes. In short:
   `node\input_methods\MixZhuyin\config_tool.js <page>`) without a window and
   exits, before the job object is set up. The installer's Start menu shortcut
   uses it.
+- **Preserved keys**: `TextService::addPreservedKey` ignores a GUID it
+  already holds, because the backend sends its preserved keys with every
+  `onActivate`.
 - **Program name**: `Client::filterKeyDown` adds `app`, the lower-case file
   name of the process the text service is loaded in (`appName()` in
   `PIMEClient.cpp`), so the backend can learn each program's mix of Chinese
